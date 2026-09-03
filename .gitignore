@@ -1,0 +1,61 @@
+# Правило 9 (приватность): сырое видео и кропы наружу не уезжают.
+# Шаблон вида dir/* , а не dir/ : иначе git не пускает обратно даже .gitkeep
+# и структура каталогов не переживает клон.
+raw/*
+evidence/*
+*.ts
+*.mp4
+*.mkv
+
+# Веса моделей — не в git, они фиксируются по sha256 в run_manifest.json (правило 6).
+*.pt
+*.onnx
+*.engine
+
+# Артефакты прогонов. Это не исходники: они пересобираются из raw/ + configs/.
+out/*
+det/*
+track/*
+pose/*
+attn/*
+attr/*
+calib/*
+zones/*
+run_manifest.json
+
+# Но структура каталогов должна пережить клон — иначе этапы упадут на mkdir.
+!raw/.gitkeep
+!evidence/.gitkeep
+!out/.gitkeep
+!det/.gitkeep
+!track/.gitkeep
+!pose/.gitkeep
+!attn/.gitkeep
+!attr/.gitkeep
+!calib/.gitkeep
+!zones/.gitkeep
+
+# Кривая присутствия по дню — обоснование выбора часа. Идёт в отчёт, значит
+# должна лежать в репозитории вместе с кодом, который её построил.
+!out/density.csv
+!out/density.png
+!out/density_meta.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Снимок артефактов на время параллельной разметки — не исходник.
+snapshot_morning/
+
+# Картинки README собираются scripts/make_readme_figures.py из артефактов,
+# но в репозиторий кладутся: без них README нечитаем на GitHub.
+!docs/img/
+!docs/img/*.webp
+
+# Скриншоты оверлея — тяжёлые jpg, в репозиторий не идут.
+out/overlay_frames/

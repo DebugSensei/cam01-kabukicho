@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "looq"
+version = "0.1.0"
+description = "CAM-01 Kabukicho: оффлайн-пайплайн присутствия, остановок и ориентации по зонам витрин"
+requires-python = ">=3.10,<3.11"
+
+# ВНИМАНИЕ: этот список ФИКСИРУЕТ окружение, но не устанавливается автоматически.
+# Установка выполняется вручную (см. docs/JOURNAL.md, запись от 2026-09-03).
+# torch намеренно НЕ указан: в окружении стоит сборка 2.11.0+cu128 под CUDA 12.8,
+# и любая попытка переустановить его через pip подтянет CPU-колесо. Версия torch
+# фиксируется не здесь, а в run_manifest.json на каждом прогоне (правило 6).
+dependencies = [
+    "numpy>=1.26,<2.0",       # 2.x ломает ABI ultralytics/opencv в этой связке
+    "opencv-python>=4.9",     # чтение видео, GaussianBlur для обезличивания кропов
+    "pandas>=2.1",            # артефакты этапов
+    "pyarrow>=15.0",          # parquet: единственный формат артефактов S3-S7 и evidence
+    "PyYAML>=6.0",
+  "matplotlib>=3.8",     # графики выбора часа и отладка калибровки S1            # configs/*.yaml
+    "shapely>=2.0",           # S2: полигоны зон, попадание точек, пересечения лучей
+    "ultralytics>=8.2",       # S3/S5: детектор и поза (подключается начиная с S3)
+    "lapx>=0.5",              # венгерский алгоритм для трекера S4
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools.packages.find]
+include = ["looq*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
