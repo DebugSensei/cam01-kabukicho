@@ -1,0 +1,72 @@
+schema_version: '2'
+clip: raw/clip_debug_2030JST.ts
+clip_sha256: 25135c46c25ce1a60414478bf1d1d7c1be709d427bd52b852862746c5e79c7a3
+frame_idx: 0
+coordinate_frame: frame_px
+note_ru: Клики — ЗАТРАВКА RANSAC, а не контрольные точки. В удержанную выборку для
+  невязки они не входят. ground_pair — единственные линии на плоскости земли, только
+  по ним меряется ширина улицы.
+lines:
+  L1:
+    role: street_ground
+    side: left
+    name_ru: ЛЕВАЯ сторона, низ стены (стык с мостовой)
+    points_px:
+    - - 111.0
+      - 1060.0
+    - - 582.0
+      - 902.0
+    - - 920.0
+      - 777.0
+  L2:
+    role: street
+    side: left
+    name_ru: ЛЕВАЯ сторона, карниз / низ ряда вывесок
+    points_px:
+    - - 950.0
+      - 766.0
+    - - 1196.0
+      - 667.0
+    - - 1379.0
+      - 589.0
+  L3:
+    role: street_ground
+    side: right
+    name_ru: ПРАВАЯ сторона, бордюр
+    points_px:
+    - - 1608.0
+      - 1057.0
+    - - 1707.0
+      - 852.0
+    - - 1768.0
+      - 703.0
+  L4:
+    role: street
+    side: right
+    name_ru: ПРАВАЯ сторона, верх фасадов
+    points_px:
+    - - 1770.0
+      - 681.0
+    - - 1803.0
+      - 569.0
+    - - 1828.0
+      - 492.0
+  V1:
+    role: vertical
+    side: null
+    name_ru: 'ВЕРТИКАЛЬ: низ, затем верх'
+    points_px:
+    - - 606.0
+      - 801.0
+    - - 605.0
+      - 488.0
+ground_pair:
+- L1
+- L3
+hint_line_residual_px:
+  L1: 2.997
+  L2: 1.084
+  L3: 2.712
+  L4: 0.614
+  V1: 0.0
+  max: 2.997
