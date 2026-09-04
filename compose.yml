@@ -1,0 +1,14 @@
+# Просмотр результатов прогона на localhost:8080.
+#   docker compose up -d      поднять
+#   docker compose down       остановить
+# Пайплайн здесь не запускается — он на хосте, ему нужен GPU.
+services:
+  looq-out:
+    build: ./docker
+    container_name: looq-out
+    ports:
+      - "8080:80"
+    volumes:
+      # Только чтение: контейнер обязан быть не способен испортить артефакты.
+      - ./out:/usr/share/nginx/html:ro
+    restart: unless-stopped
