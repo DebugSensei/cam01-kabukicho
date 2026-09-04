@@ -1,0 +1,46 @@
+# S8 aggregate — сведение метрик
+# Правило 5 CLAUDE.md: у каждого порога есть комментарий "почему такое значение".
+# "НЕ ОТКАЛИБРОВАНО" означает, что значение выбрано до измерений на этих данных
+# и обязано попасть в отчёт с этой пометкой (правило 7).
+schema_version: "1"
+stage: "s8_aggregate"
+
+input:
+  tracks: "track/tracks.parquet"
+  frames_index: "det/frames_index.parquet"   # знаменатель всех процентов
+  events: "attn/events.parquet"
+  orient: "pose/orient.parquet"
+  attrs: "attr/tracks_attr.parquet"   # может отсутствовать: S7 опционален
+output:
+  metrics: "out/metrics.json"
+
+model: null
+
+aggregate:
+  ci_method: "wilson"         # доверительный интервал для долей
+  ci_level: 0.95
+  resample_unit: "track"      # ресэмплинг по ТРЕКАМ, не по кадрам: кадры внутри трека
+                              # сильно скоррелированы, и покадровый интервал вышел бы
+                              # фальшиво узким.
+  min_track_duration_s: 1.0   # треки короче секунды не участвуют в долях.
+                              # НЕ ОТКАЛИБРОВАНО.
+
+  # Знаменатель ЛЮБОГО процента — только кадры с processed = true из
+  # det/frames_index.parquet. Считать от общего числа кадров запрещено: кадры,
+  # которые никто не обрабатывал, тогда молча превращаются в "людей не было".
+  denominator: "frames_index.processed"
+  report_unprocessed_share: true   # доля необработанных кадров выводится в отчёт
+                                   # отдельным числом (правило 7)
+
+  # Правило 7: доля косвенных значений выводится ОТДЕЛЬНЫМ числом, а не растворяется в среднем.
+  report_indirect_shares:
+    - "foot_source"           # доля опорных точек, полученных не от голеностопа
+    - "heading_source"        # доля ориентаций, взятых из движения, а не из позы
+
+gates:
+  require_no_nan: true        # из CLAUDE.md
+  require_ci: true            # из CLAUDE.md
+  require_sums_reconcile: true  # из CLAUDE.md
+
+evidence_claims:
+  - "claim.aggregate.reconciliation"   # сходимость сумм
