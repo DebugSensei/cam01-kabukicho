@@ -1,0 +1,30 @@
+# S9 report — отчёт о достоверности
+# Правило 5 CLAUDE.md: у каждого порога есть комментарий "почему такое значение".
+# "НЕ ОТКАЛИБРОВАНО" означает, что значение выбрано до измерений на этих данных
+# и обязано попасть в отчёт с этой пометкой (правило 7).
+schema_version: "1"
+stage: "s9_report"
+
+input:
+  metrics: "out/metrics.json"
+  evidence_index: "evidence/index.parquet"
+output:
+  report: "out/report.html"
+
+model: null
+
+report:
+  self_contained: true        # никаких CDN: отчёт должен открываться без сети
+  min_evidence_per_claim: 6   # утверждение с меньшим числом пруфов не публикуется.
+                              # НЕ ОТКАЛИБРОВАНО.
+  # Правило проекта: ориентация — это НЕ взгляд. Слова ниже в русском тексте отчёта
+  # запрещены, verify_s9 грепает готовый HTML.
+  forbidden_words_ru: ["взгляд", "смотрит", "разглядывает"]
+  required_disclaimer_ru: "Ориентация — это поворот корпуса/головы, а не направление взгляда."
+
+gates:
+  require_stage_ref_per_number: true    # из CLAUDE.md: каждое число ссылается на этап
+  require_quality_metric_per_number: true
+
+evidence_claims:
+  - "claim.report.rendered_numbers"     # сверка отрисованных чисел с metrics.json
