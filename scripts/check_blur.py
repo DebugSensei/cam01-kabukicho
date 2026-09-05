@@ -5,7 +5,7 @@
 Kabukicho ночью. Этот скрипт собирает первые N кропов из evidence/ в один jpg,
 чтобы владелец посмотрел и подтвердил или потребовал усилить.
 
-Пока подтверждения нет — в docs/JOURNAL.md висит блокер.
+Пока подтверждения нет — в docs/DECISIONS.md висит блокер.
 
     python scripts/check_blur.py                 # первые 20 кропов
     python scripts/check_blur.py --n 40 --claim claim.detect.far_half
@@ -40,7 +40,15 @@ COLS = 5
 LABEL_H = 22
 
 
-def _load_index(claim: str | None, n: int):
+def _aspect(path: str) -> float:
+    """Отношение высота/ширина опубликованного кропа."""
+    im = cv2.imread(str(path))
+    if im is None or im.shape[1] == 0:
+        return float("inf")
+    return im.shape[0] / im.shape[1]
+
+
+def _load_index(claim: str | None, n: int, risky: bool = False):
     if not INDEX.is_file():
         raise SystemExit(
             f"нет {INDEX}. Сначала должен отработать этап, собирающий пруфы "
@@ -53,7 +61,16 @@ def _load_index(claim: str | None, n: int):
         df = df[df["claim_id"] == claim]
         if df.empty:
             raise SystemExit(f"в индексе нет строк с claim_id={claim!r}")
-    df = df.sort_values(["claim_id", "frame_idx"]).head(n)
+    if risky:
+        # Чем НИЖЕ отношение высота/ширина, тем меньше видно тела и тем большую
+        # долю кропа занимает лицо. У ростовой рамки отношение около 2.8 и
+        # голова укладывается в верхние ~13%; у обрезанной оно падает к 1.2,
+        # и фиксированная доля может лицо не накрыть. Сортируем по возрастанию:
+        # первыми идут самые опасные.
+        df = df.assign(_ar=df["path"].map(_aspect)).sort_values("_ar").head(n)
+        df = df.drop(columns=["_ar"])
+    else:
+        df = df.sort_values(["claim_id", "frame_idx"]).head(n)
     if df.empty:
         raise SystemExit("индекс пуст — проверять нечего")
     return df
@@ -97,10 +114,13 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--n", type=int, default=20, help="сколько кропов взять")
     ap.add_argument("--claim", default=None, help="ограничить одним claim_id")
+    ap.add_argument("--risky", action="store_true",
+                    help="самые обрезанные рамки вперёд: там лицо занимает "
+                         "бо́льшую долю кропа и полоса скорее его не накроет")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args(argv)
 
-    df = _load_index(args.claim, args.n)
+    df = _load_index(args.claim, args.n, risky=args.risky)
     cells = [_cell(r) for _, r in df.iterrows()]
 
     rows = []
@@ -123,7 +143,7 @@ def main(argv=None) -> int:
     print()
     print("Посмотрите глазами. Если лицо узнаваемо хотя бы на одном кропе —")
     print("поднимайте face_blur_top_frac или pixelate_factor в configs/evidence.yaml")
-    print("и снимайте блокер в docs/JOURNAL.md только после повторной проверки.")
+    print("и снимайте блокер в docs/DECISIONS.md только после повторной проверки.")
     return 0
 
 

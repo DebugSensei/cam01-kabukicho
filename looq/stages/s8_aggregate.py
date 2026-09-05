@@ -28,6 +28,7 @@ import numpy as np
 
 from looq import SCHEMA_VERSION, STATUS_OK, STATUS_SKELETON
 from looq.geometry import ORIENTATION_DISCLAIMER
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require, write_json
 from looq.stages._base import StageError, read_artifact_status
 
@@ -300,9 +301,13 @@ def run(cfg: dict[str, Any], manifest: RunManifest) -> dict[str, Any]:
         "unmeasured": [
             {"item": "AP@0.5 (S3)", "reason_ru": "нет разметки 300 кадров"},
             {"item": "IDF1 (S4)", "reason_ru": "нет разметки"},
-            {"item": "MAE угла (S5)", "reason_ru": "нет разметки 200 человек"},
+            {"item": "MAE угла (S5)",
+             "reason_ru": "измерен, но выборка меньше требуемых 200; "
+                          "доверительный интервал накрывает порог"},
             {"item": "precision событий (S6)", "reason_ru": "нет разметки 100 событий"},
-            {"item": "S7 атрибуты", "reason_ru": "этап вырезан из скоупа"},
+            {"item": "точность цвета одежды (S7)",
+             "reason_ru": "этап отработал, покрытие 48%, но точность не проверена "
+                          "по размеченным кропам"},
         ] + ([] if scale_known else [
             {"item": "все длины и скорости в метрах",
              "reason_ru": "калибровка не пройдена, calib_status=" + calib_status}]),
@@ -401,7 +406,7 @@ def main(argv=None) -> int:
         print(f"[{STAGE}] записано: {OUTPUT}, сходимость: "
               f"{doc['reconciliation']['all_passed']}")
         return 0
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

@@ -53,9 +53,9 @@ def main(argv=None) -> int:
         f'alt="{f.stem}" data-meta="{f.stem}"><span>{f.stem}</span></figure>'
         for f in files)
 
-    page = f"""<!doctype html><html lang="ru" data-theme="light"><meta charset="utf-8">
+    page = f"""<!doctype html><html lang="en" data-theme="light"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CAM-01 — скриншоты</title><style>{CSS}
+<title>CAM-01 screenshots</title><style>{CSS}
 .gal{{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}}
 .gal figure{{margin:0;background:var(--panel);
   border:1px solid var(--line);border-radius:12px;overflow:hidden;

@@ -10,7 +10,7 @@
 «не измерено», и подменять одно другим нельзя.
 
 Правило 3: этап не считается сделанным, пока гейт не вернул 0. Порог не подкручивать —
-сначала объяснить причину провала в docs/JOURNAL.md.
+сначала объяснить причину провала в docs/DECISIONS.md.
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq import STATUS_SKELETON                       # noqa: E402
 from looq.io import load_config                        # noqa: E402
-from looq.stages._base import read_artifact_status     # noqa: E402
+from looq.stages._base import (check_inputs_sha,       # noqa: E402
+                               read_artifact_status)
 
 STAGE = "s5_orient"
 ARTIFACT = "pose/orient.parquet"
@@ -106,6 +107,10 @@ def main(argv=None) -> int:
         # Правило 8: пустой артефакт каркаса не проходит гейт ни при каких порогах.
         print(f"[S5] артефакт {ARTIFACT} помечен status={STATUS_SKELETON} — данных нет")
 
+    # Конфиг нужен и в ветке «артефакта нет» — порог гейта читается ниже
+    # безусловно. Раньше он определялся только в else, и на свежем клоне
+    # гейт падал с UnboundLocalError вместо честного отчёта.
+    cfg = load_config(CONFIG)
     failed = 0
 
     if status in (None, STATUS_SKELETON):
@@ -115,7 +120,6 @@ def main(argv=None) -> int:
     else:
         import pandas as pd
         df = pd.read_parquet(ARTIFACT)
-        cfg = load_config(CONFIG)
 
         ok, problems = check_invariants(df)
         print(f"[S5] 1. инварианты контракта: {'ok' if ok else 'ПРОВАЛ'}")
@@ -167,18 +171,27 @@ def main(argv=None) -> int:
             else:
                 print(f"[S5]    ПРОВАЛ: MAE {m['mae']:.1f} > порога {thr}")
                 failed += 1
-    elif True:
+    else:
         print(f"[S5] 3. MAE угла: НЕ ИЗМЕРЕН — нет файла разметки {LABELS_DIR}/{LABELS_GLOB}. "
               f"Нужны 200 вручную размеченных людей; без них качество угла "
               f"не подтверждено ничем")
-    else:
-        print(f"[S5] 3. MAE угла: НЕ РЕАЛИЗОВАН, хотя разметка {LABELS} найдена")
-    if args.allow_unmeasured:
-        print("[S5] --allow-unmeasured: MAE не измерен, понижено до предупреждения")
-    else:
+        # Штраф за отсутствие разметки начисляется ТОЛЬКО здесь. Раньше этот
+        # блок стоял на уровне функции и выполнялся всегда: гейт не мог
+        # вернуть 0 ни при каком MAE, а счётчик показывал на единицу больше
+        # реально проваленных проверок.
+        if args.allow_unmeasured:
+            print("[S5] --allow-unmeasured: MAE не измерен, понижено до предупреждения")
+        else:
+            failed += 1
+
+    ok_sha, sha_problems = check_inputs_sha(ARTIFACT)
+    print(f"[S5] 4. sha входных артефактов: {'ok' if ok_sha else 'ПРОВАЛ'}")
+    for q in sha_problems:
+        print(f"[S5]      {q}")
+    if not ok_sha:
         failed += 1
 
-    print(f"[S5] провалено проверок: {failed} из 3")
+    print(f"[S5] провалено проверок: {failed} из 4")
     return 0 if failed == 0 else 1
 
 

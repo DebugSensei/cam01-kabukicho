@@ -19,7 +19,10 @@ model:
   imgsz: null
   device: "cuda:0"
   precision: "fp16"
-  tracker: "botsort"
+  tracker: "bytetrack"        # именно ByteTrack: s4_track.py импортирует
+                              # ultralytics.trackers.byte_tracker.BYTETracker.
+                              # Прежнее "botsort" попадало в run_manifest.json
+                              # и называло в отчёте не тот алгоритм.
   tracker_version: null       # заполняется из версии ultralytics в run_manifest
 
 track:

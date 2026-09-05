@@ -44,20 +44,44 @@ def test_bytetrack_survives_empty_frames():
 
 def test_speed_is_least_squares_not_neighbour_diff():
     """МНК даёт точную скорость; на краях окна — null, а не выдуманное число."""
-    frames = np.arange(40, dtype=float)
-    xs, ys = 1.3 * frames / 30.0, np.zeros(40)
-    sp = _speed_series(frames, xs, ys, 30.0, window=9)
+    ts = np.arange(40, dtype=float) / 30.0
+    xs, ys = 1.3 * ts, np.zeros(40)
+    sp = _speed_series(ts, xs, ys, window=9)
     assert np.nanmedian(sp) == pytest.approx(1.3, abs=1e-6)
     assert int(np.isnan(sp).sum()) == 8, "на краях окна должно быть ровно 8 null"
 
 
 def test_speed_null_when_ground_point_missing():
     """Дыра в проекции не заполняется интерполяцией — окно даёт null."""
-    frames = np.arange(20, dtype=float)
-    xs, ys = 1.3 * frames / 30.0, np.zeros(20)
+    ts = np.arange(20, dtype=float) / 30.0
+    xs, ys = 1.3 * ts, np.zeros(20)
     xs[10] = np.nan
-    sp = _speed_series(frames, xs, ys, 30.0, window=9)
+    sp = _speed_series(ts, xs, ys, window=9)
     assert np.isnan(sp[10])
+
+
+def test_speed_does_not_depend_on_frame_stride():
+    """Прореживание кадров не меняет скорость.
+
+    Регрессия на найденный дефект: скорость считалась как frame_idx / fps
+    ОБРАБОТАННЫХ кадров. При frame_stride = 3 соседние обработанные кадры
+    отличались по frame_idx на 3, а по времени на 0.1 с, и dt выходил втрое
+    больше настоящего — все скорости были занижены ровно в stride раз.
+    Тест прогоняет одно и то же движение, снятое подряд и через два кадра:
+    результат обязан совпасть.
+    """
+    v = 1.3
+    dense_ts = np.arange(60, dtype=float) / 30.0
+    dense = _speed_series(dense_ts, v * dense_ts, np.zeros(60), window=9)
+
+    stride = 3
+    sparse_ts = dense_ts[::stride]
+    sparse = _speed_series(sparse_ts, v * sparse_ts,
+                           np.zeros(len(sparse_ts)), window=9)
+
+    assert np.nanmedian(dense) == pytest.approx(v, abs=1e-6)
+    assert np.nanmedian(sparse) == pytest.approx(v, abs=1e-6), (
+        "скорость поехала при прореживании: время берётся не из ts")
 
 
 # --------------------------------------------------------------------------- #

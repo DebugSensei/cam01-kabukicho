@@ -35,6 +35,9 @@ OUT = Path("out/benchmark.html")
 
 
 def mae_from_labels():
+    # ВНИМАНИЕ: возвращает и "source" — имя файла, из которого взято число.
+    # Раньше имя было вписано в таблицу руками и разошлось с реальностью:
+    # печаталось n=50 рядом со ссылкой на файл с 24 строками.
     d = Path("labels")
     files = sorted(d.glob("s5_orient_*.jsonl")) if d.is_dir() else []
     if not files:
@@ -57,12 +60,31 @@ def mae_from_labels():
     lo, hi = np.percentile(bs, [2.5, 97.5])
     return {"mae": e.mean(), "lo": lo, "hi": hi, "med": np.median(e),
             "n": len(e), "gross": float((e > 90).mean()),
-            "video": hdr.get("video", "?")}
+            "video": hdr.get("video", "?"),
+            "source": str(max(files, key=lambda q: q.stat().st_size)).replace("\\", "/")}
 
 
 #: Счётчик ключей строк: имя и пояснение каждой строки переводимы, а путь
 #: к источнику — нет, это имя файла.
 _ROW_N = [0]
+
+
+def _drift_slope(hom: dict) -> float:
+    """Наклон рост-от-глубины ПО МАССИВАМ, а не из поля height_depth_slope.
+
+    S1 домножал это поле на scale_rescale_factor, хотя м/м к масштабу
+    инвариантен, и артефакт до перепрогона хранит заниженное значение.
+    Гейт verify_s1 ловит расхождение; здесь считаем сами, чтобы бенчмарк
+    и README не печатали разные числа.
+    """
+    h = np.asarray(hom.get("pilot_heights_m") or [], dtype=float)
+    d = np.asarray(hom.get("pilot_depths_m") or [], dtype=float)
+    if h.size < 30 or h.size != d.size:
+        return float(hom.get("height_depth_slope", float("nan")))
+    ok = (h > 0.8) & (h < 2.6) & np.isfinite(d) & (d > 0)
+    if int(ok.sum()) < 30:
+        return float(hom.get("height_depth_slope", float("nan")))
+    return float(np.polyfit(d[ok], h[ok], 1)[0])
 
 
 def row(name, value, source, note=("", "", "")):
@@ -92,6 +114,65 @@ def main(argv=None) -> int:
                          "из кода: он возвращается запуском без этого флага")
     args = ap.parse_args(argv)
 
+    # Регистрация ДО первого t(): f-строка с t("bm.t3") вычисляется в
+    # момент сборки sec3, и если словарь пополнить после неё, страница
+    # падает с KeyError. Ровно это и происходило.
+    register_i18n({
+        "bm.eyebrow": ("Benchmark", "Бенчмарк", "ベンチマーク"),
+        "bm.h1": ("What is measured, what is only covered, what is missing",
+                  "Что измерено, что только покрыто, чего нет",
+                  "何が計測され、何が範囲だけで、何が欠けているか"),
+        "bm.warn": ("Table 1 measures correctness, table 2 measures only volume "
+                    "and stability. They must not be mixed.",
+                    "Таблица 1 меряет правильность, таблица 2 — только объём и "
+                    "стабильность. Смешивать их нельзя.",
+                    "表1は正しさを、表2は量と安定性のみを測ります。混同は禁物です。"),
+        "bm.warn2": ("A number without a reference does not enter the first table.",
+                     "Число без эталона в первую таблицу не попадает.",
+                     "基準のない数値は表1に入りません。"),
+        "bm.t1": ("1. Measured — a reference or a direct measurement exists",
+                  "1. Измерено — есть эталон или прямой замер",
+                  "1. 計測済み — 基準または直接計測あり"),
+        "bm.t1sub": ("Every row rests on manual labelling, on the geometry of two "
+                     "vanishing points, or on a direct measurement over frames.",
+                     "Каждая строка опирается на ручную разметку, на геометрию "
+                     "двух точек схода или на прямой замер по кадрам.",
+                     "各行は手動ラベル、2消失点の幾何、またはフレームの直接計測に "
+                     "基づきます。"),
+        "bm.t2": ("2. Coverage and stability — measures volume, NOT correctness",
+                  "2. Покрытие и стабильность — меряет объём, НЕ правильность",
+                  "2. カバレッジと安定性 — 量であり正しさではない"),
+        "bm.t2sub": ("These numbers say how much data was collected and how "
+                     "consistent it is. A model agreeing with itself is not "
+                     "evidence that it is right.",
+                     "Эти числа говорят, сколько данных набрано и насколько они "
+                     "согласованы между собой. Согласованность модели с самой "
+                     "собой не является доказательством того, что она права.",
+                     "これらはデータ量と内的整合性を示します。モデルの自己整合性は "
+                     "正しさの証明ではありません。"),
+        "bm.bins": ("Median box height by depth", "Медианная высота рамки по глубине",
+                    "奥行き別の枠高中央値"),
+        "bm.binsub": ("A direct measurement over matched tracks. The cutoff "
+                      "threshold is derived from it.",
+                      "Прямой замер по сопоставленным трекам. Отсюда выведен "
+                      "порог отсечки.",
+                      "対応付けた追跡の直接計測。ここから打ち切り閾値を導出。"),
+        "bm.th.q": ("Quantity", "Величина", "項目"),
+        "bm.th.v": ("Value", "Значение", "値"),
+        "bm.th.s": ("Source", "Источник", "出典"),
+        "bm.th.h": ("How it was obtained", "Как получено", "取得方法"),
+        "bm.th.m": ("What it means", "Что это значит", "意味"),
+        "bm.th.depth": ("Depth", "Глубина", "奥行き"),
+        "bm.th.rows": ("Rows", "Строк", "行数"),
+        "bm.th.med": ("Median height", "Медиана высоты", "高さ中央値"),
+        "bm.t3": ("3. Not measured — and what it would take",
+                  "3. Не измерено — и что нужно, чтобы измерить",
+                  "3. 未計測 — 計測に必要なもの"),
+        "bm.th.miss": ("What is missing", "Чего нет", "欠けているもの"),
+        "bm.th.need": ("What it would take", "Что нужно", "必要なもの"),
+    })
+
+
     import pandas as pd
 
     hom = read_json("calib/homography.json")
@@ -112,7 +193,7 @@ def main(argv=None) -> int:
         t1.append(row(
             ("Body orientation MAE", "MAE ориентации корпуса", "体の方位MAE"),
             f"{mae['mae']:.1f}\u00b0",
-            "labels/s5_orient_24.jsonl",
+            mae.get("source", "labels/"),
             (f"95% bootstrap {ci}, median {mae['med']:.1f}, n={mae['n']} labelled "
              f"by hand, gross errors >90 deg {mae['gross']:.0%}",
              f"95% бутстрэп {ci}, медиана {mae['med']:.1f}, n={mae['n']} размечено "
@@ -138,14 +219,14 @@ def main(argv=None) -> int:
              "スケールの根拠として設定。したがって検証ではありません")),
         row(("Implied L1\u2194L3 width", "Подразумеваемая ширина L1\u2194L3",
              "含意されるL1\u2194L3幅"),
-            "5.28 m", "docs/JOURNAL.md",
+            "5.28 m", "docs/DECISIONS.md",
             ("against 6.06 m from satellite: a different cross-section, "
              "curb offset ~0.8 m",
              "против спутниковых 6.06 м: иное сечение, отступ бордюра ~0.8 м",
              "衛星の6.06mに対して。断面が異なり、縁石オフセット約0.8m")),
         row(("Height drift with depth", "Дрейф роста по глубине",
              "奥行きに伴う身長ドリフト"),
-            f"{hom['height_depth_slope']:.4f} m/m", "calib/homography.json",
+            f"{_drift_slope(hom):.4f} m/m", "calib/homography.json",
             (f"equivalent to a {hom.get('street_grade', {}).get('grade_percent', 0):.1f}% "
              f"grade; calling it a street gradient would be a guess",
              f"эквивалент уклона {hom.get('street_grade', {}).get('grade_percent', 0):.1f}%; "
@@ -175,7 +256,7 @@ def main(argv=None) -> int:
     ]
 
     bins = "".join(
-        f"<tr><td>{b['x_lo_m']:.0f}&ndash;{b['x_hi_m']:.0f} м</td>"
+        f"<tr><td>{b['x_lo_m']:.0f}&ndash;{b['x_hi_m']:.0f} m</td>"
         f"<td class='num'>{b['n_rows']}</td>"
         f"<td class='num'>{b['median_box_h_px']:.0f} px</td></tr>"
         for b in dc["bins"])
@@ -299,64 +380,10 @@ def main(argv=None) -> int:
   {t3_html}</table></div></div>
 </section>"""
 
-    register_i18n({
-        "bm.eyebrow": ("Benchmark", "Бенчмарк", "ベンチマーク"),
-        "bm.h1": ("What is measured, what is only covered, what is missing",
-                  "Что измерено, что только покрыто, чего нет",
-                  "何が計測され、何が範囲だけで、何が欠けているか"),
-        "bm.warn": ("Table 1 measures correctness, table 2 measures only volume "
-                    "and stability. They must not be mixed.",
-                    "Таблица 1 меряет правильность, таблица 2 — только объём и "
-                    "стабильность. Смешивать их нельзя.",
-                    "表1は正しさを、表2は量と安定性のみを測ります。混同は禁物です。"),
-        "bm.warn2": ("A number without a reference does not enter the first table.",
-                     "Число без эталона в первую таблицу не попадает.",
-                     "基準のない数値は表1に入りません。"),
-        "bm.t1": ("1. Measured — a reference or a direct measurement exists",
-                  "1. Измерено — есть эталон или прямой замер",
-                  "1. 計測済み — 基準または直接計測あり"),
-        "bm.t1sub": ("Every row rests on manual labelling, on the geometry of two "
-                     "vanishing points, or on a direct measurement over frames.",
-                     "Каждая строка опирается на ручную разметку, на геометрию "
-                     "двух точек схода или на прямой замер по кадрам.",
-                     "各行は手動ラベル、2消失点の幾何、またはフレームの直接計測に "
-                     "基づきます。"),
-        "bm.t2": ("2. Coverage and stability — measures volume, NOT correctness",
-                  "2. Покрытие и стабильность — меряет объём, НЕ правильность",
-                  "2. カバレッジと安定性 — 量であり正しさではない"),
-        "bm.t2sub": ("These numbers say how much data was collected and how "
-                     "consistent it is. A model agreeing with itself is not "
-                     "evidence that it is right.",
-                     "Эти числа говорят, сколько данных набрано и насколько они "
-                     "согласованы между собой. Согласованность модели с самой "
-                     "собой не является доказательством того, что она права.",
-                     "これらはデータ量と内的整合性を示します。モデルの自己整合性は "
-                     "正しさの証明ではありません。"),
-        "bm.bins": ("Median box height by depth", "Медианная высота рамки по глубине",
-                    "奥行き別の枠高中央値"),
-        "bm.binsub": ("A direct measurement over matched tracks. The cutoff "
-                      "threshold is derived from it.",
-                      "Прямой замер по сопоставленным трекам. Отсюда выведен "
-                      "порог отсечки.",
-                      "対応付けた追跡の直接計測。ここから打ち切り閾値を導出。"),
-        "bm.th.q": ("Quantity", "Величина", "項目"),
-        "bm.th.v": ("Value", "Значение", "値"),
-        "bm.th.s": ("Source", "Источник", "出典"),
-        "bm.th.h": ("How it was obtained", "Как получено", "取得方法"),
-        "bm.th.m": ("What it means", "Что это значит", "意味"),
-        "bm.th.depth": ("Depth", "Глубина", "奥行き"),
-        "bm.th.rows": ("Rows", "Строк", "行数"),
-        "bm.th.med": ("Median height", "Медиана высоты", "高さ中央値"),
-        "bm.t3": ("3. Not measured — and what it would take",
-                  "3. Не измерено — и что нужно, чтобы измерить",
-                  "3. 未計測 — 計測に必要なもの"),
-        "bm.th.miss": ("What is missing", "Чего нет", "欠けているもの"),
-        "bm.th.need": ("What it would take", "Что нужно", "必要なもの"),
-    })
 
     page = f"""<!doctype html><html lang="en" data-theme="light"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CAM-01 — бенчмарк</title><style>{CSS}
+<title>CAM-01 benchmark</title><style>{CSS}
 td.num{{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;
   white-space:nowrap}}
 table td{{font-size:13px}}

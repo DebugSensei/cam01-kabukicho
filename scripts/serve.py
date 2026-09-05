@@ -53,7 +53,10 @@ class RangeHandler(SimpleHTTPRequestHandler):
             end = int(end_s) if end_s else size - 1
         else:                       # суффиксная форма: bytes=-N
             if not end_s:
-                self.send_error(400, "битый заголовок Range")
+                # Reason phrase уходит в статусную строку, которую http.server
+                # кодирует latin-1 strict: кириллица там роняет обработчик, и
+                # клиент не получает вообще никакого ответа.
+                self.send_error(400, "malformed Range header")
                 return None
             start, end = max(0, size - int(end_s)), size - 1
         if start >= size or start > end:
@@ -99,8 +102,11 @@ class RangeHandler(SimpleHTTPRequestHandler):
             "latin-1", "ignore")
 
     def log_message(self, fmt, *args):
-        if not self.path.endswith((".jpg", ".png")):    # не засорять лог сеткой
-            sys.stderr.write(f"{self.path} -> {args[1] if len(args) > 1 else ''}\n")
+        # self.path не существует, пока стартовая строка не разобрана: на битом
+        # запросе обращение к нему давало AttributeError вместо честного 400.
+        path = getattr(self, "path", "-")
+        if not path.endswith((".jpg", ".png")):         # не засорять лог сеткой
+            sys.stderr.write(f"{path} -> {args[1] if len(args) > 1 else ''}\n")
 
 
 def main(argv=None) -> int:

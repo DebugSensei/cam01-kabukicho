@@ -38,6 +38,7 @@ from looq.calib import apply_h
 import cv2
 
 from looq.geometry import point_in_polygon_m, segment_normal_m
+from looq.evidence import EvidenceError
 from looq.io import (ConfigError, RunManifest, load_config, read_json, require,
                      sha256_file, write_json)
 from looq.stages._base import StageError, read_artifact_status
@@ -135,7 +136,7 @@ def run(cfg: dict[str, Any], manifest: RunManifest) -> dict[str, Any]:
     # обводки вместе с концами фасадов, отодвинутыми на roi_facade_margin_m
     # наружу вдоль нормали. Обводка сохраняется отдельно, чтобы было видно,
     # что расширено, а что обведено рукой.
-    margin = float((cfg.get("zones") or {}).get("roi_facade_margin_m", 0.5))
+    margin = float(require(cfg, "zones", "roi_facade_margin_m"))
     extra = []
     for f in features:
         if f["properties"]["zone_type"] != "facade":
@@ -226,7 +227,7 @@ def main(argv=None) -> int:
         manifest.finish(STATUS_OK)
         print(f"[{STAGE}] записано: {OUTPUT}")
         return 0
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

@@ -597,8 +597,15 @@ def main(argv=None) -> int:
     # её длиной. Прежняя формула считала наоборот и сплющивала план в ленту.
     canvas_w = 520
     canvas_h = int(np.clip(round(canvas_w * span_x / max(span_y, 1e-6)), 400, 1400))
+    # Какое окно реально лежит в видео. Нет паспорта — считаем, что видео
+    # покрывает всё, и честно говорим об этом в подписи: молчаливое
+    # предположение здесь уже один раз развело план с картинкой.
+    win_path = Path(args.video).with_suffix(".window.json")
+    win = read_json(win_path) if win_path.is_file() else None
+
     data = {
         "unit": unit,
+        "video_window": win,
         "duration": float(df["ts"].max()),
         "bounds": _roi_bounds if _roi_bounds else {
             "x0": float(allx.min()) - pad, "x1": float(allx.max()) + pad,
@@ -608,14 +615,25 @@ def main(argv=None) -> int:
         "frames": frames, "cum": cum, "tails": tails, "events": ev,
     }
 
-    sub = (f"{len(frames)} frames, {len(seen)} tracks, {len(ev)} events. "
+    if win and win.get("src_frame_first") is not None:
+        win_note = (f"Video covers source frames {win['src_frame_first']}"
+                    f"-{win['src_frame_last']}, not the whole run. ")
+    else:
+        win_note = ("No window descriptor next to the video: the plan clock "
+                    "assumes the video covers every processed frame. ")
+
+    sub = (f"{len(frames)} frames, {len(seen)} tracks, {len(ev)} events "
+           f"(inside the ROI only, narrower than the full run). {win_note}"
            f"calib_status = {hom.get('calib_status')}, unit: {unit}. "
            f"{metrics['scope']['n_frames_processed']} of "
            f"{metrics['scope']['n_frames_total']} source frames processed. "
            f"Video and plan share one clock: the overlay is rendered from the "
            f"processed frames at fps/stride, so video frame k is source frame "
            f"k*stride and no time fudging is applied.")
-    page = (PAGE.replace("__DATA__", json.dumps(data, ensure_ascii=False))
+    # "</script>" внутри данных закрыл бы тег и вывалил остаток JSON в разметку.
+    # Данные приходят из артефактов, но экранирование здесь стоит одной строки.
+    data_json = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    page = (PAGE.replace("__DATA__", data_json)
                 .replace("__CANVH__", str(canvas_h))
                 .replace("__CANVW__", str(canvas_w))
                 .replace("__VIDEO__", args.video)

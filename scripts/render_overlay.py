@@ -41,7 +41,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.geometry import point_in_polygon_m  # noqa: E402
-from looq.io import load_config, read_json, require  # noqa: E402
+from looq.io import load_config, read_json, require, write_json  # noqa: E402
 
 OUT = Path("out/overlay.mp4")
 FRAME_DIR = Path("out/overlay_frames")
@@ -263,15 +263,12 @@ def main(argv=None) -> int:
         plan = PlanView(PLAN_W, h, np.concatenate(pts))
     out_w = w + (PLAN_W if plan else 0)
 
-    # Старые кадры из прошлого прогона обязаны исчезнуть: иначе в папке
-    # скриншотов лежит смесь двух записей, и по имени файла их не различить.
-    if args.frame_dir.is_dir():
-        old = list(args.frame_dir.glob("*.jpg"))
-        for f in old:
-            f.unlink()
-        if old:
-            print(f"[overlay] удалено старых кадров: {len(old)}")
+    # Старые кадры обязаны исчезнуть, иначе в папке окажется смесь двух
+    # записей. Но удаляются они ПОСЛЕ успешного рендера, а не до: раньше
+    # упавший прогон оставлял пустой каталог, то есть терял и старое, и новое.
     args.frame_dir.mkdir(parents=True, exist_ok=True)
+    stale = {f.name for f in args.frame_dir.glob("*.jpg")}
+    fresh: set[str] = set()
     enc = open_encoder(args.out, (out_w, h), out_fps)
     print(f"{video} -> {args.out}: {len(frames)} кадров, {out_fps:.1f} fps, "
           f"{out_w}x{h}{' (кадр + план)' if plan else ''}")
@@ -437,6 +434,7 @@ def main(argv=None) -> int:
 
         enc.stdin.write(frame.tobytes())
         if written % JPEG_EVERY == 0:
+            fresh.add(f"f{idx:06d}.jpg")
             cv2.imwrite(str(args.frame_dir / f"f{idx:06d}.jpg"), frame,
                         [cv2.IMWRITE_JPEG_QUALITY, 88])
         written += 1
@@ -446,7 +444,37 @@ def main(argv=None) -> int:
 
     cap.release()
     enc.stdin.close()
-    enc.wait()
+    rc = enc.wait()
+    if rc != 0:
+        raise SystemExit(
+            f"ffmpeg вернул {rc}: видео {args.out} обрезано или не записано. "
+            f"Молча считать это успехом нельзя — дальше страница сошлётся "
+            f"на битый файл")
+    # Рендер дошёл до конца — только теперь убираем кадры прошлого прогона.
+    dropped = 0
+    for name in stale - fresh:
+        try:
+            (args.frame_dir / name).unlink()
+            dropped += 1
+        except OSError:
+            pass
+    if dropped:
+        print(f"[overlay] удалено кадров прошлого прогона: {dropped}")
+    # Паспорт видео рядом с самим видео: какие исходные кадры в него попали.
+    # Без него страница реплея не может знать, весь ли это час или вырезка,
+    # и её часы расходятся с картинкой.
+    side = args.out.with_suffix(".window.json")
+    write_json(side, {
+        "video": str(args.out).replace("\\", "/"),
+        "src_frame_first": int(frames[0]) if frames else None,
+        "src_frame_last": int(frames[-1]) if frames else None,
+        "n_frames": int(written),
+        "fps": float(out_fps),
+        "note_ru": "исходные кадры, попавшие в видео. Реплей сдвигает часы "
+                   "по src_frame_first, иначе план разъедется с картинкой",
+    })
+    print(f"[overlay] окно записано: {side}")
+
     n_jpg = len(list(args.frame_dir.glob("*.jpg")))
     size_mb = args.out.stat().st_size / 1e6 if args.out.is_file() else 0
     print(f"готово: {args.out} ({size_mb:.1f} МБ), кадров {written}, "

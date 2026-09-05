@@ -1,6 +1,6 @@
 """S6 attention — остановки и ориентация на витрину.
 
-Формулы из CLAUDE.md, менять только с записью в docs/JOURNAL.md:
+Формулы из CLAUDE.md, менять только с записью в docs/DECISIONS.md:
 
     stop_score : доля времени в apron-полигоне со скоростью ниже порога,
                  длительностью > min_duration_s
@@ -31,8 +31,10 @@ import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.geometry import grazing_angle_deg, point_in_polygon_m, sector_hits_segment_m
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require
-from looq.stages._base import (
+from looq.stages._base import (commit_parquet,
+                               
     Col,
     StageError,
     build_evidence,
@@ -42,6 +44,8 @@ from looq.stages._base import (
 )
 
 STAGE = "s6_attn"
+INPUTS = ["zones/zones.geojson", "calib/homography.json",
+          "track/tracks.parquet", "pose/orient.parquet"]
 OUTPUT = "attn/events.parquet"
 
 # Покадровый след: без него отчёт и оверлей вынуждены ПЕРЕСЧИТЫВАТЬ попадания
@@ -207,7 +211,8 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
 
     rows: list[dict[str, Any]] = []
     frame_rows: list[dict[str, Any]] = []
-    stats = {"stop": 0, "gaze": 0, "stop_and_gaze": 0, "pass_by": 0, "low_conf": 0}
+    stats = {"stop": 0, "gaze": 0, "stop_and_gaze": 0, "pass_by": 0,
+             "low_conf": 0, "thin_window": 0}
 
     for track_id, g in df.groupby("track_id"):
         g = g.sort_values("frame_idx")
@@ -252,8 +257,16 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
             # на дистанцию сектора, независимо от того, куда был повёрнут.
             # Считать знаменателем только apron нельзя: полоса узкая, и почти
             # все прохожие выпадали бы из знаменателя, завышая любые доли.
-            seg_mid = (seg_a + seg_b) / 2.0
-            near = np.hypot(xs - seg_mid[0], ys - seg_mid[1]) <= max_dist
+            # Дистанция до ОТРЕЗКА, а не до его середины. Середина давала
+            # круг вокруг центра фасада: 4807 из 35114 засчитанных кадров
+            # лежали дальше 8 м от неё, то есть числитель не был подмножеством
+            # знаменателя и доля могла превысить единицу.
+            seg_v = seg_b - seg_a
+            seg_len2 = float(seg_v @ seg_v) or 1e-12
+            tt = np.clip(((xs - seg_a[0]) * seg_v[0]
+                          + (ys - seg_a[1]) * seg_v[1]) / seg_len2, 0.0, 1.0)
+            near = np.hypot(xs - (seg_a[0] + tt * seg_v[0]),
+                            ys - (seg_a[1] + tt * seg_v[1])) <= max_dist
             frames_arr = g["frame_idx"].to_numpy(dtype=np.int64)
             for i in range(len(xs)):
                 if not (in_apron[i] or gaze_mask[i] or near[i]):
@@ -272,7 +285,14 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
 
             n = len(xs)
             in_zone_n = int(in_apron.sum())
-            orient_n = int(np.isfinite(yaw_used).sum())
+            # Знаменатель — кадры трека В ОКНЕ с измеренным углом, ровно как
+            # в CLAUDE.md и docs/CONTRACTS.md 8.1: «доля времени трека В ОКНЕ».
+            # Раньше делилось на ВСЕ кадры трека с измеренным углом, включая те,
+            # где человек был за пределами восьми метров и попасть в фасад не
+            # мог физически. Числитель и знаменатель жили на разных множествах,
+            # и доля размывалась длиной трека, а не вниманием: медиана
+            # знаменателя 64 кадра против 31 в окне.
+            orient_n = int((near & np.isfinite(yaw_used)).sum())
             stop_runs = [(i, j) for i, j in _runs(stop_mask)
                          if ts[j] - ts[i] >= min_dur]
             stop_time = sum(ts[j] - ts[i] for i, j in stop_runs)
@@ -295,10 +315,23 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
             else:
                 continue
 
-            low_conf = bool(grazing.any()) or orient_n == 0
+            # Порог по ДОЛЕ теряет смысл, когда знаменатель меньше 1/порог:
+            # там уже ОДИН засчитанный кадр перешагивает порог, и правило
+            # вырождается в «хотя бы раз посмотрел» — ровно то, против чего
+            # порог и введён (см. комментарий к min_score_for_event).
+            # Граница выведена из самого порога, а не назначена: при
+            # min_score_for_event = 0.20 это 5 кадров, полсекунды при 10 fps.
+            # Замер до введения границы: 39% засчитанных событий имели
+            # знаменатель меньше 10 кадров, 27% — меньше 5, у витрины M4
+            # медиана знаменателя была 3 кадра.
+            min_obs = int(np.ceil(1.0 / min_gaze_score)) if min_gaze_score > 0 else 1
+            thin = has_gaze and orient_n < min_obs
+            low_conf = bool(grazing.any()) or orient_n == 0 or thin
             stats[etype] += 1
             if low_conf:
                 stats["low_conf"] += 1
+            if thin:
+                stats["thin_window"] += 1
             rows.append({
                 "event_id": f"{int(track_id)}:{fac['zone_id']}:{etype}:{frame0}",
                 "track_id": int(track_id), "zone_id": fac["zone_id"],
@@ -341,15 +374,21 @@ def main(argv=None) -> int:
         manifest.start()
         sampler = build_evidence(cfg, STAGE, manifest)
         res = run(cfg, manifest, sampler)
-        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK)
-        write_parquet(FRAMES_OUTPUT, FRAMES_COLS, res["frame_rows"], STAGE, STATUS_OK)
+        # Оба артефакта читаются S8 совместно, поэтому подменяются разом.
+        tmps = [
+            write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK,
+                          inputs=INPUTS, commit=False),
+            write_parquet(FRAMES_OUTPUT, FRAMES_COLS, res["frame_rows"], STAGE,
+                          STATUS_OK, inputs=INPUTS, commit=False),
+        ]
+        commit_parquet(tmps)
         manifest.note("output_artifacts", [OUTPUT, FRAMES_OUTPUT])
         manifest.note("elapsed_s", round(time.time() - _t0, 1))
         manifest.finish(STATUS_OK)
         print(f"[{STAGE}] записано: {OUTPUT} ({len(res['rows'])} строк)")
         print(f"[{STAGE}] пруфы не собраны: S6 работает по артефактам, кадров не читает")
         return 0
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

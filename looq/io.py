@@ -307,7 +307,15 @@ class RunManifest:
                     doc = existing
                     doc["schema_version"] = SCHEMA_VERSION
             except (json.JSONDecodeError, OSError):
-                # Битый манифест не должен ронять прогон, но и молча теряться не должен.
+                # Битый манифест не должен ронять прогон, но и потерять его
+                # нельзя: внутри провенанс всех остальных этапов — веса, sha,
+                # тайминги. Отводим файл в сторону и говорим куда.
+                keep = self.path.with_suffix(self.path.suffix + ".unreadable")
+                try:
+                    self.path.replace(keep)
+                    doc["previous_manifest_saved_to"] = str(keep)
+                except OSError:
+                    pass
                 doc["previous_manifest_unreadable"] = True
         doc["stages"][self.stage] = self._entry
         write_json(self.path, doc)

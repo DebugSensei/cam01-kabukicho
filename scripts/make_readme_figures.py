@@ -114,12 +114,21 @@ def height_drift(hom, out_dir: Path, name: str) -> None:
         if dlo <= a <= dhi and hlo <= b <= hhi:
             cv2.circle(img, (px(a), py(b)), 1, (206, 190, 182), -1, cv2.LINE_AA)
 
-    slope = float(hom["height_depth_slope"])
+    # Наклон считается ЗДЕСЬ по тем же массивам, что нарисованы точками, а не
+    # берётся из поля height_depth_slope: иначе прямая может не соответствовать
+    # облаку. Ровно это и было — этап писал в поле значение, домноженное на
+    # scale_rescale_factor.
+    slope, icept = np.polyfit(d, hts, 1)
+    slope = float(slope)
     med = float(np.median(hts))
     dmid = float(np.median(d))
     cv2.line(img, (px(dlo), py(med + slope * (dlo - dmid))),
              (px(dhi), py(med + slope * (dhi - dmid))), ACCENT, 3, cv2.LINE_AA)
-    ci = hom.get("height_depth_slope_ci95") or [slope, slope]
+    # CI бутстрапом по тем же точкам, тоже без опоры на поле артефакта.
+    rng = np.random.default_rng(20260904)
+    boot = [np.polyfit(d[i], hts[i], 1)[0]
+            for i in (rng.integers(0, len(d), len(d)) for _ in range(400))]
+    ci = [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))]
     cv2.putText(img, f"slope {slope:.4f} m/m, 95% CI [{ci[0]:.4f}, {ci[1]:.4f}]"
                      f" - does not cover zero",
                 (x0 + 12, y0 + 28), FONT, 0.58, ACCENT, 2, cv2.LINE_AA)

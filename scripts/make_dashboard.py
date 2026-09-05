@@ -140,17 +140,19 @@ UNMEASURED_EN = {
         ("Tracking IDF1 / ID switches", "IDF1 и склейки треков",
          "追跡IDF1・ID切替"),
         ("no ground truth", "нет разметки", "正解データなし")),
+    # Ключи словаря обязаны совпадать с item из out/metrics.json, иначе
+    # строка уедет в ветку "(untranslated)".
     "MAE угла (S5)": (
         ("Orientation angle MAE", "MAE угла ориентации", "方位角のMAE"),
-        ("measured on 24 people, not the 200 the gate asks for",
-         "измерен на 24 людях вместо 200, которых требует гейт",
-         "ゲート要件200人に対し24人で計測")),
+        ("measured on {n} people, not the 200 the gate asks for",
+         "измерен на {n} людях вместо 200, которых требует гейт",
+         "ゲート要件200人に対し{n}人で計測")),
     "precision событий (S6)": (
         ("Attention-event precision", "Precision событий внимания",
          "注目イベントの適合率"),
         ("no ground truth for 100 events", "нет разметки 100 событий",
          "100イベントの正解データなし")),
-    "S7 атрибуты": (
+    "точность цвета одежды (S7)": (
         ("Clothing colour accuracy", "Точность цвета одежды", "服装色の精度"),
         ("no labelled crops: white balance applied but not validated",
          "нет размеченных кропов: баланс белого применён, но не валидирован",
@@ -172,6 +174,10 @@ I18N = {
     "nav.overlay":     ("Overlay video", "Оверлей", "オーバーレイ"),
     "nav.frames":      ("Screenshots", "Скриншоты", "スクリーンショット"),
     "nav.bench":       ("Benchmark", "Бенчмарк", "ベンチマーク"),
+    # out/report.html — артефакт этапа S9 по контракту, и до сих пор на него
+    # не вела ни одна ссылка: единственная страница, где у каждого числа
+    # напечатан compute_ref, была недостижима из интерфейса.
+    "nav.report":      ("Provenance", "Провенанс", "来歴"),
     "nav.theme":       ("Light / Dark", "Светлая / Тёмная", "ライト / ダーク"),
 
     "hero.eyebrow":  ("Storefront attention", "Внимание к витринам", "店舗への注目"),
@@ -784,7 +790,7 @@ JS = """
 #: ни переключателя темы.
 NAV = [("dashboard.html", "nav.dash"), ("replay.html", "nav.replay"),
        ("overlay.mp4", "nav.overlay"), ("frames.html", "nav.frames"),
-       ("benchmark.html", "nav.bench")]
+       ("benchmark.html", "nav.bench"), ("report.html", "nav.report")]
 
 THEME_SVG = (
     '<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -851,6 +857,21 @@ def b64_img(path: Path, max_w: int | None = None, quality: int = 92) -> str | No
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
     return ("data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
             if ok else None)
+
+
+def _n_labels() -> int:
+    """Сколько людей реально размечено — по самому большому файлу в labels/.
+
+    Тот же выбор, что делают verify_s5.py и make_benchmark.py: наибольший файл.
+    Число нельзя вписывать в текст руками — оно меняется с каждой разметкой.
+    """
+    d = Path("labels")
+    files = sorted(d.glob("s5_orient_*.jsonl")) if d.is_dir() else []
+    if not files:
+        return 0
+    rows = max(files, key=lambda q: q.stat().st_size).read_text(
+        encoding="utf-8").splitlines()
+    return sum(1 for x in rows[1:] if x and json.loads(x).get("label") is not None)
 
 
 def sheet_html(rows, note: str) -> str:
@@ -1076,6 +1097,12 @@ def main(argv=None) -> int:
     gaze_ev = events[events["event_type"].isin(["gaze", "stop_and_gaze"])
                      & (~events["low_confidence"])]
     lookers = int(gaze_ev["track_id"].nunique())
+    # low_confidence здесь НЕ фильтруется, и это не небрежность. Флаг ставится
+    # по скользящему углу, неизмеренной ориентации и вырожденному окну — всё
+    # это качество ОРИЕНТАЦИИ, а остановка считается по скорости и от угла не
+    # зависит. Отбрасывать такие события значило бы терять настоящие остановки
+    # из-за неизвестного угла. Правило совпадает с compute_zone_stoppers в S8,
+    # поэтому карточка и out/metrics.json показывают одно число.
     stoppers = int(events[events["event_type"].isin(["stop", "stop_and_gaze"])]
                    ["track_id"].nunique())
     look_rate = lookers / n_tracks if n_tracks else 0.0
@@ -1197,6 +1224,10 @@ def main(argv=None) -> int:
         item = u.get("item", "")
         got = UNMEASURED_EN.get(item)
         if got:
+            # {n} подставляется из файла разметки: раньше здесь стояло
+            # замороженное «24 людях», пока измерение шло уже по 50.
+            got = tuple(tuple(x.replace("{n}", str(_n_labels())) for x in tri)
+                        for tri in got)
             k = f"unm.{abs(hash(item)) % 100000}"
             EXTRA_I18N[k + ".t"] = got[0]
             EXTRA_I18N[k + ".w"] = got[1]
@@ -1217,8 +1248,11 @@ def main(argv=None) -> int:
 
     # ---- воронка: каждая ступень подмножество предыдущей ------------------ #
     zf_all = pd.read_parquet("attn/track_zone_frames.parquet")
-    in_zone = set(zf_all.loc[zf_all["in_apron"], "track_id"]) | set(
-        zf_all["track_id"])
+    # S6 пишет строку, если человек в apron ЛИБО в окне фасада, поэтому
+    # «попал в зону» — это и есть все треки в этом файле. Прежнее выражение
+    # объединяло подмножество in_apron со всем множеством, то есть фильтр
+    # in_apron не делал ничего и только притворялся, что делает.
+    in_zone = set(zf_all["track_id"])
     turned = set(gaze_ev["track_id"])
     stopped = set(events[events["event_type"].isin(["stop", "stop_and_gaze"])]
                   ["track_id"])
@@ -1227,7 +1261,15 @@ def main(argv=None) -> int:
         (t("fn.entered"), len(in_zone), "S6 · attn/track_zone_frames.parquet"),
         (t("fn.turned"), len(turned & in_zone),
          "S6 · gaze/stop_and_gaze, low_confidence excluded"),
-        (t("fn.stopped"), len(stopped & in_zone), "S6 · attn/events.parquet"),
+        # Каждая ступень — подмножество предыдущей, как и написано над
+        # воронкой. Без пересечения с turned последняя ступень оказывалась
+        # шире своего родителя и подпись врала.
+        # Ступень воронки, а не общее число остановившихся: «из повернувшихся
+        # ещё и остановились». Карточка выше показывает всех остановившихся,
+        # и это разные величины — здесь пересечение обязательно, иначе
+        # ступень окажется шире родительской и подпись «подмножество» соврёт.
+        (t("fn.stopped"), len(stopped & turned & in_zone),
+         "S6 · stop/stop_and_gaze among turned"),
     ])
 
     # ---- доли по зонам ---------------------------------------------------- #

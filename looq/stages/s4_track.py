@@ -35,6 +35,7 @@ import numpy as np
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.calib import apply_h
 from looq.geometry import FOOT_SOURCE_IS_DIRECT, indirect_share
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require
 from looq.stages._base import (
     Col,
@@ -161,15 +162,22 @@ def _foot_from_bbox(box: dict) -> tuple[float, float, str, float]:
     return ((box["x1_px"] + box["x2_px"]) / 2.0, box["y2_px"], "bbox_bottom", box["conf"])
 
 
-def _speed_series(frames: np.ndarray, xs: np.ndarray, ys: np.ndarray,
-                  fps: float, window: int) -> np.ndarray:
+def _speed_series(ts: np.ndarray, xs: np.ndarray, ys: np.ndarray,
+                  window: int) -> np.ndarray:
     """Скорость скользящим МНК по окну. На краях окна — null.
 
     МНК, а не разность соседних кадров: за кадр пешеход проходит ~4 см, а
     дрожание опорной точки на плане на порядок больше. Скорость неотрицательна,
     поэтому шум в разностях не сокращается, а сдвигает оценку вверх.
+
+    Время берётся В СЕКУНДАХ из самой строки. Прежняя версия принимала
+    frame_idx и делила его на частоту ОБРАБОТАННЫХ кадров: при frame_stride=3
+    соседние обработанные кадры отличаются по frame_idx на 3, а по времени на
+    0.1 с, и dt выходил 0.3 вместо 0.1. Все скорости были занижены ровно в
+    frame_stride раз — медиана 0.297 м/с вместо 0.890, максимум 3.01 вместо
+    9.04, из-за чего порог max_plausible_mps не срабатывал ни разу.
     """
-    n = len(frames)
+    n = len(ts)
     out = np.full(n, np.nan)
     half = window // 2
     for i in range(n):
@@ -179,7 +187,7 @@ def _speed_series(frames: np.ndarray, xs: np.ndarray, ys: np.ndarray,
         sl = slice(lo, hi)
         if np.isnan(xs[sl]).any() or np.isnan(ys[sl]).any():
             continue
-        t = frames[sl] / fps
+        t = ts[sl]
         tc = t - t.mean()
         stt = float((tc ** 2).sum())
         if stt < 1e-12:
@@ -275,8 +283,8 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
                 n_invalid_gp += 1
                 continue      # точка за горизонтом: null, а не выдуманное число
             xs[i], ys[i] = float(m[0]), float(m[1])
-        frames = np.array([r["frame_idx"] for r in obs], dtype=np.float64)
-        speeds = _speed_series(frames, xs, ys, fps_est, window)
+        t_arr = np.array([r["ts"] for r in obs], dtype=np.float64)
+        speeds = _speed_series(t_arr, xs, ys, window)
         for i, r in enumerate(obs):
             v = speeds[i]
             if np.isfinite(v) and v > max_speed:
@@ -382,7 +390,8 @@ def main(argv=None) -> int:
         sampler = build_evidence(cfg, STAGE, manifest)
 
         res = run(cfg, manifest, sampler)
-        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK)
+        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK,
+                      inputs=INPUTS)
 
         # Пруфы требуют кадров; на этом этапе кропы берутся из видео и пока
         # не собираются — этап падает на finalize, если claim-ы объявлены,
@@ -394,7 +403,7 @@ def main(argv=None) -> int:
         print(f"[{STAGE}] записано: {OUTPUT} ({len(res['rows'])} строк), пруфы {index}")
         return 0
 
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)
