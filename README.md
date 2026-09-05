@@ -96,13 +96,18 @@ cumulative tracks and ray hits, and the source of the metric scale.
 
 The ground-plane panel is a **separate** render, `make overlay-plan`, not this video.
 
-**The video is anonymised, by construction.** `scripts/render_overlay.py` blurs every
+**The renderer anonymises, by construction.** `scripts/render_overlay.py` blurs every
 head before it draws anything, with no flag to turn it off — an option that can be
 forgotten eventually is. Two models look for people at a deliberately low threshold, and
 the blur follows the facial keypoints rather than a fixed band, because a bowed head
 falls outside the band. Measured over twenty frames: 354 confident facial keypoints
 before, one after, and none of them retaining facial detail. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) §13.
+
+**The recording linked above predates that change and is not anonymised.** It is the
+earlier render, kept for a demonstration and due to be replaced by the anonymised one.
+Until it is, the claim above is about the code, not about that file — the source stream
+is public either way, but the distinction is the reader's to know, not to discover.
 
 ---
 
