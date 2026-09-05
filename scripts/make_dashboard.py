@@ -265,6 +265,26 @@ I18N = {
     "cap.frames": ("frames of", "кадров от", "枚 /"),
     "cap.people": ("people", "человек", "人"),
     "cap.person": ("person", "человека", "人"),
+    "sec.vid.eyebrow": ("Overlay", "Оверлей", "オーバーレイ"),
+    "sec.vid.title":   ("What the camera saw", "Что видела камера",
+                        "カメラが見たもの"),
+    "sec.vid.sub":     ("Three minutes of the processed hour, rendered from the "
+                        "stored artifacts. Boxes carry the track id, the garment "
+                        "class and the dwell time; the arrow is a turn of the body "
+                        "or head, not a gaze direction.",
+                        "Три минуты обработанного часа, отрисованные из сохранённых "
+                        "артефактов. В рамке — id трека, класс одежды и время "
+                        "пребывания; стрелка — поворот корпуса или головы, а не "
+                        "направление взгляда.",
+                        "処理済み1時間のうち3分。保存済みアーティファクトから描画。"
+                        "枠には追跡ID・服の色・滞在時間、矢印は体または頭の向きで"
+                        "視線ではありません。"),
+    "sec.vid.note":    ("The video is hosted on YouTube: a 98 MB file has no place "
+                        "in a source repository.",
+                        "Видео лежит на YouTube: файлу в 98 МБ не место в "
+                        "репозитории исходников.",
+                        "動画はYouTube上にあります。98MBのファイルをソース"
+                        "リポジトリに置くべきではありません。"),
     "sec.zones.eyebrow": ("Per storefront", "По витринам", "店舗別"),
     "sec.zones.title":   ("Attention by storefront", "Внимание по витринам",
                           "店舗別の注目度"),
@@ -624,6 +644,13 @@ code{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;
 #lb img.small{height:min(78vh,900px);image-rendering:pixelated}
 #lb .meta{color:#c9d3e2;font-size:13px;text-align:center;max-width:80ch}
 
+/* ---- встроенный плеер --------------------------------------------------- */
+/* Обёртка с фиксированной пропорцией 16:9. Без неё iframe пришлось бы задавать
+   в пикселях, и на телефоне он вылезал бы за экран или оставлял поля. */
+.vid{position:relative;width:100%;padding-top:56.25%;border-radius:14px;
+  overflow:hidden;background:#000;border:1px solid var(--line)}
+.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
 /* ---- бургер ------------------------------------------------------------ */
 /* На телефоне восемь кнопок в строку не помещаются никак: горизонтальная
    прокрутка внутри шапки прятала половину из них за краем, и найти язык или
@@ -806,6 +833,10 @@ THEME_SVG = (
 #: Ссылка на видео в публичной сборке. mp4 в репозиторий не кладётся, и
 #: относительная ссылка на него на Pages вела бы в 404.
 PUBLIC_VIDEO_URL = "https://youtu.be/3ZXDQcmrOUI"
+#: Тот же ролик для встраивания. Домен без кук: обычный youtube.com ставит
+#: трекеры ещё до нажатия play, а страница отчёта о приватности этого
+#: делать не должна.
+PUBLIC_VIDEO_ID = "3ZXDQcmrOUI"
 
 #: Что публикуется на Pages. Остальные страницы существуют только локально,
 #: и вести на них из публичной шапки значило бы обещать несуществующее.
@@ -1278,6 +1309,24 @@ def main(argv=None) -> int:
 <div class="cap">{t("arch.stage")} <b>{esc(g['stage'].iloc[0])}</b> · {len(g)} {t("arch.frames")}</div>
 {sheet_html(rows, t("cap.arch"))}</div>""")
 
+    # Плеер ставится ТОЛЬКО в публичной сборке. Локально рядом лежит сам mp4 и
+    # страница реплея с синхронным планом — вставлять туда ещё и ролик с
+    # YouTube значило бы предлагать худшую копию того, что уже есть.
+    # nocookie-домен: обычный youtube.com ставит трекеры до нажатия play.
+    video_section = "" if not args.public else f"""<section>
+  <div class="eyebrow">{t("sec.vid.eyebrow")}</div>
+  <h2>{t("sec.vid.title")}</h2>
+  <p class="sub">{t("sec.vid.sub")}</p>
+  <div class="vid"><iframe
+    src="https://www.youtube-nocookie.com/embed/{PUBLIC_VIDEO_ID}"
+    title="CAM-01 Kabukicho overlay" loading="lazy"
+    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen></iframe></div>
+  <p class="sub" style="margin-top:10px">{t("sec.vid.note")}</p>
+</section>
+
+"""
+
     EXTRA_I18N: dict[str, tuple] = {}
     lim_rows = []
     for lim in m.get("limitations", []):
@@ -1424,6 +1473,7 @@ def main(argv=None) -> int:
 <div>&bull; <b>{t("warn.demo")}</b> {t("warn.demo2")}</div>
 </section>
 
+{video_section}
 <section>
   <div class="eyebrow">{t("sec.zones.eyebrow")}</div>
   <h2>{t("sec.zones.title")}</h2>
