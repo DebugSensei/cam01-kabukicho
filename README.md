@@ -5,17 +5,18 @@ Street-level attention analytics from a single fixed camera.
 ![Python 3.10](https://img.shields.io/badge/python-3.10-3776ab)
 ![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76b900)
 ![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![tests 94](https://img.shields.io/badge/tests-94-2ea44f)
+![tests 103](https://img.shields.io/badge/tests-103-2ea44f)
 
 ![Dashboard](docs/img/dashboard.webp)
 
-[Live dashboard][pages] · [Overlay video](https://youtu.be/3ZXDQcmrOUI)
+[Overlay video](https://youtu.be/3ZXDQcmrOUI) — the dashboard is not published yet; build it locally with `make visuals` after a run
 
 <!-- The published dashboard address lives in exactly one place: the [pages]
      definition at the bottom of this file. Change it there and every link
      in the README follows. -->
 
-An offline pipeline that turns one hour of a public street camera into
+An offline pipeline that turns one **already recorded** hour of a public street
+camera into
 per-storefront attention metrics, with a confidence interval on every rate and,
 for every claim that carries frames, a grid of the actual anonymised frames behind it.
 
@@ -43,7 +44,10 @@ that reference for 6 of the 22; the dashboard shows stage and artifact but never
 ## What it measures
 
 - **Presence.** Unique tracks, and mean simultaneous detections per 10-second bin.
-- **Zone entry.** Tracks whose ground position enters a storefront's apron polygon.
+- **Storefront proximity.** Tracks whose ground position comes within 8 m of a
+  facade segment. Apron-polygon entry is recorded per frame but never aggregated into
+  a metric: it feeds the stop test only. `visitors_*` therefore counts approach, not
+  entry.
 - **Attention.** Tracks whose orientation sector geometrically crosses the facade
   segment, grazing angles excluded.
 - **Stops.** Speed below a relative threshold inside an apron polygon.
@@ -59,7 +63,10 @@ that reference for 6 of the 22; the dashboard shows stage and artifact but never
 - **No demographics.** Gender, age and ethnicity are not estimated and will not be:
   privacy, and no ground truth to gate them against.
 - **No face recognition, no re-identification across cameras.** Face regions in every
-  published crop are pixelated and blurred before anything reaches disk.
+  published crop are pixelated and blurred before anything reaches disk. The setting on
+  disk is mixed: 173 of 257 crops were written at a blur fraction of 0.22, which the
+  owner later raised to 0.30 because at distance the head sits higher in the crop.
+  Regenerating them needs a re-run of S3, S5 and S7 that has not been done.
 - **No shop entries.** There is no metric for "walked through the door"; the funnel
   ends at "stopped".
 
@@ -107,6 +114,8 @@ flowchart TD
     S4 --> A4["track/tracks.parquet"]
 
     A4 --> S5["S5 pose + orient<br/>YOLO11m-pose, shoulder vector"]
+    RAW --> S5
+    RAW --> S7
     A1 --> S5
     S5 --> A5["pose/orient.parquet"]
 
@@ -124,7 +133,7 @@ flowchart TD
     A8 --> S9["S9 report"]
     S9 --> OUT["out/report.html"]
 
-    A8 --> VIS["make visuals<br/>outside the S0-S9 chain"]
+    A8 --> VIS["make visuals<br/>outside the S1-S9 chain"]
     A7 --> VIS
     VIS --> OUT2["out/dashboard.html<br/>out/replay.html<br/>out/benchmark.html"]
 ```
@@ -136,7 +145,10 @@ the previous stage's artifact and writes its own. The schemas in
 [`docs/CONTRACTS.md`](docs/CONTRACTS.md) are the API; a column with spatial meaning and
 no `_px` / `_m` suffix is a review error.
 
-**Every stage has a gate.** `verify/verify_s<N>.py` returns 0 or 1 and prints its
+**Every stage has a gate script, and two of them compute anything.**
+`verify/verify_s1.py` and `verify/verify_s5.py` measure and print their metrics; the
+other eight name the metric they cannot compute, return 1 and say so. All ten currently
+fail. `verify/verify_s<N>.py` returns 0 or 1 and prints its
 metrics. "I checked it visually" is not a gate. A threshold is never nudged to make a
 gate pass — the reason for the failure goes in
 [`docs/DECISIONS.md`](docs/DECISIONS.md) first.
@@ -144,7 +156,9 @@ gate pass — the reason for the failure goes in
 **No number is obtained by eye.** Everything in the report is computed by code from an
 artifact on disk, and the line that computes it can be pointed at.
 
-**Anything unmeasured is labelled unmeasured.** Attribute coverage, the share of
+**Anything unmeasured is labelled unmeasured** — with one gap: the ROI boundary is
+not among the numbers printed into `out/metrics.json`, only attribute coverage and the
+share of
 indirect foot points, the ROI boundary — all printed explicitly. 40 % coverage with an
 honest figure beats 100 % with rubbish.
 
@@ -172,7 +186,7 @@ pole-polar relation between the horizon and the vertical vanishing point:
 | Vanishing points from manual clicks | **Rejected.** Focal 541 px, camera height 2.13 m, height IQR 5.39 m, median speed 113 m/s. Five independent quantities disagreed at once. |
 | Affine stub | Used only to keep the pipeline running end to end. Every number it produced was discarded. |
 | Manual ground plane | Superseded. |
-| **Self-calibration from pedestrians** | Accepted for geometry. 10 150 accepted detection boxes, focal 1030 px. |
+| **Self-calibration from pedestrians** | Accepted for geometry: horizon, focal length and camera height from 10 150 accepted detection boxes, focal 1030 px. The street direction is still a one-time hand seed — clicked lines in `configs/calib_hints.yaml`, which ship with the repository. |
 
 The failure of generation 1 was not subtle: a reconstructed height spreading over 21
 metres and a median walking speed of 113 m/s both point at a wrong vertical vanishing
@@ -230,7 +244,10 @@ arrays rather than from the field.
 **It is still not called a street gradient**, and this matters. A hand analysis recorded
 in [`docs/DECISIONS.md`](docs/DECISIONS.md) — shifting the vertical vanishing point by
 ±10 % changes the drift by only 8 % and never brings it to zero — points at the scene
-rather than the calibration. **No code in this repository computes that sweep**, so
+rather than the calibration. The same holds for the depth split of the orientation
+error quoted further down — 25.4 deg against 17.3 and the -0.27 correlation were derived
+by hand from `labels/s5_orient_50.jsonl`, and no stage recomputes them.
+**No code in this repository computes that sweep either**, so
 unlike every other number here it cannot be pointed at a line; treat it as an argument,
 not a measurement. But "the scene" could be a slope, a systematic bias in the
 foot point at distance, or a selection effect in who gets detected far away. We
@@ -393,19 +410,28 @@ slope over the whole burst.
 ## Quickstart
 
 ```bash
+pip install torch==2.11.0 torchvision==0.26.0 \n  --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
 pip install -r requirements.txt
-python -m pytest tests/ -o addopts="" -q     # 92 passed, 2 skipped
-make serve                                    # http://localhost:8080
+python -m pytest tests/ -o addopts="" -q     # 101 passed, 2 skipped on a fresh clone
+make serve                                    # http://localhost:8080, serves out/
 ```
 
 The two skipped tests check that every row of the evidence index points at a file that
 exists and is the anonymised one; they need a completed run and skip on a fresh clone.
 
+`out/` is empty on a fresh clone: the pages exist only after a run.
+
 `make serve` starts nginx in Docker over `out/`. Without Docker: `make serve-nodocker`
 runs a small server that implements HTTP Range, which the replay needs to seek the video.
 
-To reproduce a run you need the recordings, the model weights and a GPU. Full command
-sequence in the [`Makefile`](Makefile); the stage list is `make run-all`. Every run
+To reproduce a run you need the recordings, the model weights, a GPU — and one manual
+step. The storefront outlines are traced by hand: `make zones` opens an OpenCV window
+for a twenty-click tracing that writes `zones/zones.json`, which is **not** in the
+repository, and S2 refuses to run without it. S1's clicked seeds, by contrast, do ship.
+
+Full command sequence in the [`Makefile`](Makefile). `make run-all` covers S1-S6 and
+S8-S9: S0 is not implemented and S7 (garment colour) runs separately as `make attrs`.
+Every run
 writes `run_manifest.json` with the weights sha256, imgsz, device, precision and library
 versions, because pinned requirements are only half of reproducibility. One gap: S1 runs
 YOLO11m-pose through its own config key rather than the shared one, so its manifest entry
@@ -420,7 +446,7 @@ records the model fields as null even though the calibration depends on that inf
 | Source of scale | Scale comes from the median pedestrian height. Street width was rejected as the source: the 6.06 m satellite reference implies a 1.93 m median height. | Height is not an independent check — it defines the scale. One independent check remains: the implied L1–L3 distance of 5.28 m falls inside the plausible 4.6–5.6 m. |
 | Street grade | The ground is modelled as flat, yet reconstructed height drifts with depth. A 4.9 % grade would explain it. | Lengths and speeds are distorted more far from the camera than near it. Sensitivity analysis excludes the calibration as the cause; the scene is not identified. |
 | Vanishing point vs horizon | The two estimates disagree by 104 px against an 87 px tolerance. | Two independent estimates of one quantity did not converge; focal length, and with it scale, are less well determined than we would like. |
-| Reproducibility of the calibration | The published geometry is reproducible only from an archived input. Its sha256 is now recorded in `calib/homography.json`, but the detections file it was computed from has been overwritten by a later S3 run. | The S1 gate fails this check on purpose, and the failure is left standing: it is visible rather than hidden. On the next full run the calibration is measured afresh and every metre in the report is recomputed with it. |
+| Reproducibility of the calibration | The published geometry is reproducible only from an archived input. Its sha256 is now recorded in `calib/homography.json`, but the detections file it was computed from has been overwritten by a later S3 run. | The S1 gate fails 7 of its 9 checks and every failure is left standing rather than hidden: this provenance check (deliberate), the held-out reprojection error that the self-calibration path never implemented, the height spread, the pedestrian speed and the facade baselines the gate asks for and the artifact does not carry, and the vanishing-point holdout residual. On the next full run the calibration is measured afresh and every metre in the report is recomputed with it. |
 
 ## Not measured
 
@@ -454,16 +480,22 @@ partly abstracted: the two inference stages `looq/stages/s3_detect.py` and
 `looq/stages/s5_orient.py` write `det/frames.parquet` and `pose/orient.parquet`, and
 everything downstream reads those artifacts without knowing what produced them. Swapping
 the model is nevertheless not a one-file change — Ultralytics is also constructed in
+`looq/pilot.py` (the detector behind S1's pedestrian sample) and in
 `looq/stages/s1_calib.py` (the pose model that fixes the metric scale) and imported in
 `looq/stages/s4_track.py` (`BYTETracker`), plus two helper scripts.
 
-Source footage is a third-party public live stream. This repository contains no raw
+Source footage is a third-party public live stream. Two frames of it are committed as
+figures in `docs/img/` — the overlay still and the zone reference — and they are not
+anonymised, being a re-publication of an already public stream rather than evidence
+crops. Beyond those, this repository contains no raw
 video, no unblurred crops and no face imagery: `raw/`, `*.ts`, `*.mp4` and `*.pt` are
 excluded by `.gitignore`, and every published crop passes through
 `looq/evidence.py::blur_face_region` — pixelation followed by a Gaussian — before it
 reaches disk, enforced by a single write path and a test that asserts it.
 
-<!-- ONE place to set the published dashboard address. Replace the value
-     below after GitHub Pages is created; nothing else in the README needs
-     touching. -->
+<!-- ONE place to set the published dashboard address. When GitHub Pages
+     exists, put the URL here and restore the link on line 12 to
+     [Live dashboard][pages] — those are the only two edits needed. The link
+     is currently absent rather than pointing at nothing, because a dead
+     anchor in the first screenful is worse than no anchor. -->
 [pages]: # "GitHub Pages address not set yet"
