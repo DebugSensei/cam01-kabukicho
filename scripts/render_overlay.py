@@ -41,7 +41,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.geometry import point_in_polygon_m  # noqa: E402
+from looq.evidence import EvidenceError, blur_face_region  # noqa: E402
 from looq.io import load_config, read_json, require, write_json  # noqa: E402
+from looq.pilot import infer_params  # noqa: E402
 
 OUT = Path("out/overlay.mp4")
 FRAME_DIR = Path("out/overlay_frames")
@@ -61,6 +63,18 @@ BOX_MATCH_TOL_FRAC = 0.08
 BOX_MATCH_TOL_MIN_PX = 4.0     # для совсем мелких рамок доля вырождается
 PLAN_W = 430
 
+#: Порог детектора для ОБЕЗЛИЧИВАНИЯ. Намеренно много ниже боевого: цена
+#: лишнего размытия — размытый столб, цена пропуска — опубликованное лицо.
+#: Полнота здесь важнее точности, и это не тот компромисс, который стоит
+#: подкручивать ради красоты кадра.
+ANON_CONF = 0.05
+
+#: Ниже этой высоты рамки полоса головы вырождается: при top_frac 0.3 у рамки
+#: в 20 px это 6 px, меньше min_kernel_px из конфига.
+ANON_MIN_BOX_H = 20
+
+EVIDENCE_CONFIG = "configs/evidence.yaml"
+
 ZONE_COLORS = [(90, 230, 90), (60, 190, 255), (255, 160, 80), (230, 120, 255)]
 #: Цвет точки ног по источнику опорной точки. Прямое измерение и косвенная
 #: подстановка обязаны различаться глазом: иначе картинка внушает точность,
@@ -75,6 +89,139 @@ def track_color(track_id: int) -> tuple[int, int, int]:
     h = (int(track_id) * 47) % 180
     b, g, r = cv2.cvtColor(np.uint8([[[h, 200, 255]]]), cv2.COLOR_HSV2BGR)[0][0]
     return int(b), int(g), int(r)
+
+
+def load_anonymiser(detect_cfg: dict):
+    """Детектор и параметры обезличивания. Без них рендер не начинается.
+
+    Отдельный проход детектором, а НЕ сохранённые детекции из
+    det/frames.parquet: те отфильтрованы боевым порогом уверенности и
+    отсечкой по высоте рамки в 70 px, то есть людей мельче и неувереннее
+    там просто нет. Для рисования боксов это правильно, для обезличивания —
+    нет: не попавший в паркет детекций всё равно остаётся человеком
+    на кадре.
+    """
+    from ultralytics import YOLO
+
+    priv = load_config(EVIDENCE_CONFIG).get("privacy") or {}
+    need = ("face_blur_top_frac", "blur_kernel_frac", "blur_sigma_frac",
+            "pixelate_factor")
+    missing = [k for k in need if k not in priv]
+    if missing:
+        raise SystemExit(
+            f"в {EVIDENCE_CONFIG} нет ключей приватности {missing}. Рендер "
+            f"оверлея без обезличивания не запускается (правило 9)")
+
+    weights = (detect_cfg.get("model") or {}).get("weights")
+    if not weights or not Path(weights).is_file():
+        raise SystemExit(
+            f"нет весов детектора {weights!r}. Обезличивание — часть рендера, "
+            f"а не опция: без детектора кадр не отрисовывается")
+
+    # ВТОРАЯ модель, поз. Замер на восьми кадрах: детектор на пороге 0.05
+    # пропустил 11 человек, чьи лица модель позы нашла уверенно. Одна сеть
+    # ошибается там, где другая справляется, и для обезличивания дешевле
+    # объединить их находки, чем спорить, какая права.
+    pose_w = Path("models/yolo11m-pose.pt")
+    if not pose_w.is_file():
+        raise SystemExit(
+            f"нет весов позы {pose_w}. Они нужны не для красоты: детектор "
+            f"в одиночку пропускает людей, и это измерено")
+    return (YOLO(weights), YOLO(str(pose_w))), priv
+
+
+#: Кейпоинты лица в COCO: нос, глаза, уши.
+FACE_KP = (0, 1, 2, 3, 4)
+
+#: Насколько раздуть рамку вокруг найденных кейпоинтов лица, в долях от её
+#: собственного размера. Кейпоинты отмечают точки, а закрыть надо всю голову:
+#: волосы, подбородок, уши по краям.
+HEAD_PAD = 0.9
+
+
+def _head_boxes_from_pose(res) -> list[tuple[float, float, float, float]]:
+    """Рамки вокруг найденных кейпоинтов лица.
+
+    Полоса в верхних 30% рамки человека — приближение, и оно ломается на
+    наклонённой голове: замер на кадре f060369 показал лицо, у которого нос
+    внутри полосы, а подбородок под её краем, с резкой границей ровно по
+    лицу. Кейпоинты говорят, где голова НА САМОМ ДЕЛЕ, и размывать надо там.
+    """
+    if res.keypoints is None or res.keypoints.conf is None:
+        return []
+    xy = np.asarray(res.keypoints.xy.cpu())
+    cf = np.asarray(res.keypoints.conf.cpu())
+    out = []
+    for pi in range(cf.shape[0]):
+        pts = [xy[pi, j] for j in FACE_KP if cf[pi, j] >= 0.20]
+        if not pts:
+            continue
+        pts = np.asarray(pts, dtype=np.float64)
+        x0, y0 = pts[:, 0].min(), pts[:, 1].min()
+        x1, y1 = pts[:, 0].max(), pts[:, 1].max()
+        # у профиля видны один глаз и ухо: рамка вырождается в точку, и
+        # раздувать её от нулевого размера нечего. Берём запас от роста.
+        span = max(x1 - x0, y1 - y0, 12.0)
+        pad = span * HEAD_PAD
+        out.append((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
+    return out
+
+
+def _boxes_union(models, frame, params: dict) -> np.ndarray:
+    """Рамки для обезличивания: люди от обеих моделей плюс головы по позе.
+
+    Дубликаты не убираются: размыть одну и ту же голову дважды безвредно,
+    а выкидывать пересечения значило бы рисковать ради экономии, которой
+    здесь нет.
+    """
+    out = []
+    for m in models:
+        r = m.predict(frame, imgsz=params.get("imgsz", 1280), conf=ANON_CONF,
+                      device=params.get("device", "cpu"),
+                      half=bool(params.get("half", False)),
+                      classes=[0], verbose=False)[0]
+        if r.boxes is not None and len(r.boxes):
+            out.append(np.asarray(r.boxes.xyxy.cpu(), dtype=np.float64))
+        heads = _head_boxes_from_pose(r)
+        if heads:
+            out.append(np.asarray(heads, dtype=np.float64))
+    return np.vstack(out) if out else np.empty((0, 4))
+
+
+def anonymise_frame(frame, model, params: dict, priv: dict) -> tuple[int, int]:
+    """Размывает голову каждому найденному человеку. Правит кадр на месте.
+
+    Вызывается ДО отрисовки боксов и стрелок: иначе размытие затёрло бы
+    разметку, а не лицо. Возвращает (размыто, отброшено).
+    """
+    models = model if isinstance(model, (tuple, list)) else (model,)
+    done = skipped = 0
+    boxes = _boxes_union(models, frame, params)
+    # Рамка человека вытянута вертикально (h/w около 2.5), рамка головы близка
+    # к квадрату. У головы размывается ВСЯ площадь, а не верхняя доля: она и
+    # есть голова, доли внутри неё брать неоткуда.
+    for box in boxes:
+        x1, y1, x2, y2 = [int(round(v)) for v in box]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+        if x2 - x1 < 4 or y2 - y1 < ANON_MIN_BOX_H:
+            skipped += 1
+            continue
+        h, w = y2 - y1, x2 - x1
+        top = 1.0 if h < 1.7 * w else float(priv["face_blur_top_frac"])
+        try:
+            blurred, _ = blur_face_region(
+                frame[y1:y2, x1:x2].copy(),
+                top_frac=top,
+                kernel_frac=float(priv["blur_kernel_frac"]),
+                sigma_frac=float(priv["blur_sigma_frac"]),
+                pixelate_factor=int(priv["pixelate_factor"]))
+        except EvidenceError:
+            skipped += 1          # область уже однородна, лица там нет
+            continue
+        frame[y1:y2, x1:x2] = blurred
+        done += 1
+    return done, skipped
 
 
 def open_encoder(path: Path, size: tuple[int, int], fps: float):
@@ -246,6 +393,12 @@ def main(argv=None) -> int:
     if not frames:
         raise SystemExit("в track/tracks.parquet нет кадров")
 
+    # Модель обезличивания грузится ДО открытия видео: если весов или ключей
+    # приватности нет, рендер обязан не начаться вовсе, а не остановиться на
+    # середине с половиной необезличенных кадров на диске.
+    anon_model, anon_priv = load_anonymiser(cfg)
+    params = infer_params(cfg)
+
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         raise SystemExit(f"cv2 не открыл {video}")
@@ -279,6 +432,7 @@ def main(argv=None) -> int:
     n_predicted = 0
     trail_plan: list[tuple[np.ndarray, tuple]] = []
     wanted, idx, written = set(frames), 0, 0
+    anon_done = anon_skipped = 0
 
     while wanted:
         ok, frame = cap.read()
@@ -288,6 +442,16 @@ def main(argv=None) -> int:
             idx += 1
             continue
         wanted.discard(idx)
+
+        # ОБЕЗЛИЧИВАНИЕ — ПЕРВОЕ, ЧТО ПРОИСХОДИТ С КАДРОМ, и оно
+        # безусловно. Флага нет намеренно: опция, которую можно забыть
+        # выставить, рано или поздно окажется невыставленной, а цена
+        # забывчивости здесь — опубликованное лицо. До отрисовки, а не
+        # после: иначе размытие затёрло бы боксы и стрелки вместо лиц.
+        n_anon, n_skip = anonymise_frame(frame, anon_model, params, anon_priv)
+        anon_done += n_anon
+        anon_skipped += n_skip
+
         g = by_frame[idx]
         lit = hits_by_frame.get(idx, [])
         lit_zones = {z for z, _ in lit}
@@ -475,6 +639,9 @@ def main(argv=None) -> int:
     })
     print(f"[overlay] окно записано: {side}")
 
+    print(f"[overlay] обезличено рамок {anon_done}, отброшено вырожденных "
+          f"{anon_skipped} (порог детектора {ANON_CONF}, полоса "
+          f"{anon_priv['face_blur_top_frac']})")
     n_jpg = len(list(args.frame_dir.glob("*.jpg")))
     size_mb = args.out.stat().st_size / 1e6 if args.out.is_file() else 0
     print(f"готово: {args.out} ({size_mb:.1f} МБ), кадров {written}, "

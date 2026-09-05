@@ -1245,3 +1245,114 @@ found only by a reader.
 Three files are exempted in `.gitignore` **by name**. Not the `out/` folder and
 not a `*.html` mask: the mask would have pulled in `replay.html` with its link to
 a local mp4.
+
+## 13. Overlay anonymisation
+
+### 13.1. Why it was necessary
+
+The page refused to publish 394 blurred crops on privacy grounds — and then
+embedded three minutes of video of the same street, faces unblurred, at
+1920x1080. More data, and better quality, than what we had refused to
+publish.
+
+Softening the wording in 12.2 was rejected by the owner: a principle is not
+adjusted to fit what has already been done. Removing the player was rejected
+too — the video is the main thing the demonstration shows. One option left:
+render it again.
+
+### 13.2. How it is done
+
+Anonymisation is **part of the render, not an option**. There is no flag to
+turn it off and there will not be: an option that can be forgotten will
+eventually be forgotten, and the price of forgetting here is a published face.
+The test `test_anonymisation_has_no_off_switch` guards against such a flag.
+
+Order matters: anonymisation is the first thing that happens to a frame,
+BEFORE the boxes and arrows are drawn. Otherwise the blur would wipe out the
+tracing instead of the faces.
+
+Three decisions, each forced by a measurement:
+
+**A separate detector pass, not the stored detections.** In
+`det/frames.parquet` the detections are filtered by the production confidence
+threshold and by the 70 px box-height cutoff: anyone smaller or less certain
+is simply not there. Right for drawing boxes, wrong for anonymisation.
+
+**Detector threshold 0.05 instead of the production one.** The price of a blur
+too many is a blurred lamppost; the price of a miss is a published face.
+Recall matters more than precision, and this is not the trade-off to nudge for
+a better-looking frame.
+
+**Two models instead of one.** Measured over eight frames: the detector at
+0.05 missed 11 people whose faces the pose model found with confidence. The
+boxes are taken as a union; duplicates are not removed, since blurring one
+head twice does no harm.
+
+**The blur follows the head that was found, not a band.** A band across the top
+30% of a person's box is an approximation, and it broke on frame f060369: the
+person was looking down, the nose landed inside the band and the chin fell
+below its hard edge. The facial keypoints say where the head ACTUALLY is; a box
+is built around them with 90% of their size as padding, and all of it is blurred.
+
+### 13.2.1. Fallback path: a person with no head keypoints
+
+**The person box is ALWAYS blurred, whether or not a pose was found.** Head
+boxes go ON TOP of it, not instead of it. The case is not hypothetical: an
+occluded person, one filmed from behind, one cut off by the frame edge — the
+pose model returns no keypoints for any of them. If the blur depended on
+keypoints, such a person would go into the frame uncovered, and nothing would
+catch it.
+
+Checked by `test_person_without_head_keypoints_still_gets_the_band`. The test
+was verified by mutation: make the person box depend on a pose being present
+and it fails.
+
+**The kind of box is marked explicitly.** The first version told a head from a
+person by aspect ratio: anything less vertically elongated than 1.7 counted as
+a head and was blurred whole. That worked only by luck — `HEAD_PAD = 0.9` held
+the head box at a ratio of 1.556, 0.14 from the threshold. Reducing the padding
+to 0.6 (a reasonable wish: less blur than necessary) would have quietly turned
+a head into a "person", of which only the top third is blurred, and left the
+face exposed. The kind is now set when the boxes are collected, and dropping
+`HEAD_PAD` to 0.4 in the mutation check breaks nothing.
+
+### 13.3. The measurement
+
+Confident facial keypoints (nose, eyes, ears; conf >= 0.30) are counted by a
+pose model — a **different** one from the detector that did the blurring:
+identical models would prove only that a model agrees with itself.
+
+What is measured is not the number of keypoints but the **sharpness around
+them**. The model locates the HEAD from the shoulders and the torso and
+confidently puts a "nose" on a pixelated blob; the danger is not that the head
+is visible but that the face is. The threshold of 13.4 is the p5 sharpness on
+un-anonymised frames: even the blurriest real face is sharper.
+
+The measurement is taken on the frame immediately after anonymisation and
+BEFORE anything is drawn. That was learned the expensive way: on a finished
+frame the model placed an "ear" with confidence 0.32 on the green caption
+`1916 blue 2.5s`, where there is no face at all. A test on the finished frame
+would be measuring the quality of our own graphics.
+
+**20 frames, evenly spaced across the hour:**
+
+| | before | after |
+|---|---|---|
+| confident facial keypoints | 354 | 1 |
+| sharpness around them, median | 26.0 | 1.2 |
+| sharpness, maximum | 72.0 | 1.2 |
+| **keypoints above the 13.4 threshold** | **341** | **0** |
+
+Checked by `tests/test_overlay_anonymised.py`, which skips on a fresh clone
+with no weights and no recording — the synthetic part runs always.
+
+### 13.4. What the measurement does NOT prove
+
+That no face is recognisable by a human. It proves that where the pose model
+finds a face, no high-frequency detail is left. Clothing, build, companions,
+time and place still identify a person — exactly the argument for not
+publishing the full crop archive in 12.2, and covering the faces does not
+retire it.
+
+The old version of the video on YouTube is to be deleted: it contains the same
+frames without anonymisation.

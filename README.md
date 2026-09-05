@@ -96,9 +96,13 @@ cumulative tracks and ray hits, and the source of the metric scale.
 
 The ground-plane panel is a **separate** render, `make overlay-plan`, not this video.
 
-**This video is not anonymised.** The pixelation and blur described above apply to the
-evidence crops the pipeline writes to disk, not to a re-render of a stream that YouTube
-already publishes publicly. Nothing in `scripts/render_overlay.py` touches faces.
+**The video is anonymised, by construction.** `scripts/render_overlay.py` blurs every
+head before it draws anything, with no flag to turn it off — an option that can be
+forgotten eventually is. Two models look for people at a deliberately low threshold, and
+the blur follows the facial keypoints rather than a fixed band, because a bowed head
+falls outside the band. Measured over twenty frames: 354 confident facial keypoints
+before, one after, and none of them retaining facial detail. See
+[`docs/DECISIONS.md`](docs/DECISIONS.md) §13.
 
 ---
 
