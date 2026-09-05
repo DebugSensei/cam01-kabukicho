@@ -282,14 +282,37 @@ def run(cfg: dict[str, Any], manifest: RunManifest) -> str:
                                ("visitors_", "stop_rate_", "orientation_rate_",
                                 "dwell_median_")))
 
+    # Строка возврата и английская врезка. Страница публикуется на Pages, и
+    # читатель попадает сюда с англоязычного дашборда: без ссылок назад это
+    # тупик, а без врезки — русская страница без объяснения, что это такое.
+    # Ссылки — простой разметкой: тянуть шапку из scripts/ в стадию нельзя,
+    # этапы не зависят от инструментов отрисовки.
+    nav = ('<div class="src" style="margin-bottom:18px">'
+           '<a href="dashboard.html" style="color:#7aa2ff">&#8592; Dashboard</a>'
+           ' &middot; <a href="benchmark.html" style="color:#7aa2ff">Benchmark</a>'
+           '</div>')
+    lede = ('<div class="card"><b>What this page is</b>'
+            '<div class="src">The trustworthiness report: every published number '
+            'with the stage that produced it, that stage quality metric — or an '
+            'explicit "not measured" — and the file, function and line that '
+            'computed it. The dashboard shows the numbers; this page shows where '
+            'each one comes from.<br><br>'
+            'The body below is in Russian. It is the working engineering report, '
+            'written in the language the project was built in, and translating it '
+            'would put a second source of truth next to the first. The dashboard '
+            'and the benchmark page are in English, Russian and Japanese.'
+            '</div></div>')
+
     doc = f"""<!doctype html><html lang="ru"><meta charset="utf-8">
-<title>CAM-01 Kabukicho — отчёт о достоверности</title><style>{CSS}</style>
+<title>CAM-01 Kabukicho — provenance report</title><style>{CSS}</style>
 <div class="wrap">
+{nav}
 <h1>CAM-01 Kabukicho</h1>
 <p class="sub">Отчёт о достоверности. Обработано кадров
 {scope['n_frames_processed']} из {scope['n_frames_total']}
 ({scope['processed_frac'] * 100:.1f}%), длительность {scope['duration_s']:.0f} с.</p>
 {banner}
+{lede}
 
 <div class="card"><b>{_esc(ORIENTATION_DISCLAIMER)}</b>
 <div class="src">Везде ниже «повёрнут к витрине» означает поворот корпуса или
