@@ -167,25 +167,37 @@ def _head_boxes_from_pose(res) -> list[tuple[float, float, float, float]]:
     return out
 
 
-def _boxes_union(models, frame, params: dict) -> np.ndarray:
-    """Рамки для обезличивания: люди от обеих моделей плюс головы по позе.
+#: Как размывать рамку. Помечается ЯВНО при сборе, а не угадывается потом по
+#: пропорции: прежняя версия считала головой всё, что не вытянуто вертикально
+#: сильнее 1.7. Работало это только потому, что HEAD_PAD = 0.9 держал рамку
+#: головы на 1.556 — запас 0.14. Уменьшить отступ до 0.6, и голова стала бы
+#: «человеком»: размылась бы её верхняя треть, а лицо осталось. Молча.
+KIND_PERSON, KIND_HEAD = "person", "head"
 
-    Дубликаты не убираются: размыть одну и ту же голову дважды безвредно,
-    а выкидывать пересечения значило бы рисковать ради экономии, которой
-    здесь нет.
+
+def _boxes_union(models, frame, params: dict) -> list[tuple[np.ndarray, str]]:
+    """Что размывать на кадре: (рамка, вид).
+
+    Рамка человека добавляется ВСЕГДА, независимо от того, нашлись ли у него
+    кейпоинты головы. Рамки голов идут СВЕРХ, а не вместо: если поза не
+    сработала — перекрытый человек, спина, край кадра, — остаётся полоса, и
+    человек не уходит незакрытым.
+
+    Дубликаты не убираются: размыть одну голову дважды безвредно, а выкидывать
+    пересечения значило бы рисковать ради экономии, которой здесь нет.
     """
-    out = []
+    out: list[tuple[np.ndarray, str]] = []
     for m in models:
         r = m.predict(frame, imgsz=params.get("imgsz", 1280), conf=ANON_CONF,
                       device=params.get("device", "cpu"),
                       half=bool(params.get("half", False)),
                       classes=[0], verbose=False)[0]
         if r.boxes is not None and len(r.boxes):
-            out.append(np.asarray(r.boxes.xyxy.cpu(), dtype=np.float64))
-        heads = _head_boxes_from_pose(r)
-        if heads:
-            out.append(np.asarray(heads, dtype=np.float64))
-    return np.vstack(out) if out else np.empty((0, 4))
+            for b in np.asarray(r.boxes.xyxy.cpu(), dtype=np.float64):
+                out.append((b, KIND_PERSON))
+        for hb in _head_boxes_from_pose(r):
+            out.append((np.asarray(hb, dtype=np.float64), KIND_HEAD))
+    return out
 
 
 def anonymise_frame(frame, model, params: dict, priv: dict) -> tuple[int, int]:
@@ -196,19 +208,17 @@ def anonymise_frame(frame, model, params: dict, priv: dict) -> tuple[int, int]:
     """
     models = model if isinstance(model, (tuple, list)) else (model,)
     done = skipped = 0
-    boxes = _boxes_union(models, frame, params)
-    # Рамка человека вытянута вертикально (h/w около 2.5), рамка головы близка
-    # к квадрату. У головы размывается ВСЯ площадь, а не верхняя доля: она и
-    # есть голова, доли внутри неё брать неоткуда.
-    for box in boxes:
+    for box, kind in _boxes_union(models, frame, params):
         x1, y1, x2, y2 = [int(round(v)) for v in box]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
         if x2 - x1 < 4 or y2 - y1 < ANON_MIN_BOX_H:
             skipped += 1
             continue
-        h, w = y2 - y1, x2 - x1
-        top = 1.0 if h < 1.7 * w else float(priv["face_blur_top_frac"])
+        # У рамки головы размывается ВСЯ площадь: она и есть голова, брать
+        # долю внутри неё неоткуда. У рамки человека — верхняя доля из
+        # конфига, и это запасной путь для тех, у кого позу не нашли.
+        top = 1.0 if kind == KIND_HEAD else float(priv["face_blur_top_frac"])
         try:
             blurred, _ = blur_face_region(
                 frame[y1:y2, x1:x2].copy(),

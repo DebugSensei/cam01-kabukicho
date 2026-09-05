@@ -51,21 +51,48 @@ class _FakeBoxes:
         return _T(self._x)
 
 
+class _FakeKeypoints:
+    """xy и conf в форме, которую отдаёт ultralytics."""
+
+    def __init__(self, xy, conf):
+        self._xy = np.asarray(xy, dtype=np.float64)
+        self._cf = np.asarray(conf, dtype=np.float64)
+
+    @staticmethod
+    def _wrap(v):
+        class _T:
+            def __init__(self, x):
+                self._x = x
+
+            def cpu(self):
+                return self._x
+        return _T(v)
+
+    @property
+    def xy(self):
+        return self._wrap(self._xy)
+
+    @property
+    def conf(self):
+        return self._wrap(self._cf)
+
+
 class _FakeResult:
-    def __init__(self, xyxy):
+    def __init__(self, xyxy, kp=None):
         self.boxes = _FakeBoxes(xyxy)
         #: Детектор без позы кейпоинтов не отдаёт — как настоящий yolo11m.
-        self.keypoints = None
+        self.keypoints = kp
 
 
 class _FakeModel:
-    """Детектор, возвращающий заранее известные рамки."""
+    """Детектор, возвращающий заранее известные рамки и, если задано, позу."""
 
-    def __init__(self, xyxy):
+    def __init__(self, xyxy, kp=None):
         self._xyxy = xyxy
+        self._kp = kp
 
     def predict(self, *a, **kw):
-        return [_FakeResult(self._xyxy)]
+        return [_FakeResult(self._xyxy, self._kp)]
 
 
 PRIV = {"face_blur_top_frac": 0.30, "blur_kernel_frac": 0.35,
@@ -129,6 +156,73 @@ def test_anonymisation_has_no_off_switch():
     call = src[src.index("n_anon, n_skip = anonymise_frame("):]
     head = src[:src.index("n_anon, n_skip = anonymise_frame(")]
     assert not head.rstrip().endswith(":"), "вызов обезличивания стоит под условием"
+
+
+def test_person_without_head_keypoints_still_gets_the_band():
+    """ЗАПАСНОЙ ПУТЬ. Позы нет — размывается верхняя доля рамки, а не ничего.
+
+    Случай не выдуманный: перекрытый человек, снятый со спины, срезанный
+    краем кадра. Модель позы на них кейпоинтов не даёт. Если бы размытие
+    зависело от кейпоинтов, такой человек уходил бы в кадр незакрытым — и
+    заметить это было бы нечем.
+    """
+    ro = _render_overlay()
+    frame = _sharp_frame()
+    box = (100, 50, 200, 350)                    # человек 100x300
+    before_head = _sharpness(frame[50:140, 100:200])
+    before_body = _sharpness(frame[250:350, 100:200])
+
+    # keypoints=None — ровно то, что отдаёт детектор без позы
+    done, _ = ro.anonymise_frame(frame, _FakeModel([box]), {"imgsz": 640}, PRIV)
+
+    assert done == 1, "рамка человека без позы обязана быть обработана"
+    assert _sharpness(frame[50:140, 100:200]) < before_head * 0.5, (
+        "запасной путь не сработал: верхняя доля рамки осталась резкой")
+    assert _sharpness(frame[250:350, 100:200]) == pytest.approx(
+        before_body, rel=1e-6), "размылось тело, а должна была голова"
+
+
+def test_head_box_is_blurred_whole_not_by_fraction():
+    """У рамки головы размывается вся площадь, а не её верхняя доля."""
+    ro = _render_overlay()
+    frame = _sharp_frame()
+    # нос, глаза, уши сгруппированы — рамка головы строится вокруг них
+    kp = _FakeKeypoints(
+        xy=[[[300, 200], [295, 195], [305, 195], [288, 198], [312, 198]]],
+        conf=[[0.9, 0.9, 0.9, 0.9, 0.9]])
+    person = (270, 170, 330, 360)
+
+    ro.anonymise_frame(frame, _FakeModel([person], kp), {"imgsz": 640}, PRIV)
+
+    # низ рамки головы: при размытии только верхней доли остался бы резким
+    heads = ro._head_boxes_from_pose(_FakeResult([person], kp))
+    assert heads, "рамка головы не построена"
+    hx0, hy0, hx1, hy1 = [int(v) for v in heads[0]]
+    low = frame[max(0, hy1 - 12):hy1, max(0, hx0):hx1]
+    assert low.size and _sharpness(low) < 12.0, (
+        "низ рамки головы остался резким — размылась только доля")
+
+
+def test_head_and_person_are_marked_not_guessed():
+    """Вид рамки задаётся явно и не выводится из её пропорции.
+
+    Прежняя версия считала головой всё, что вытянуто вертикально слабее 1.7.
+    Работало только потому, что HEAD_PAD = 0.9 держал рамку головы на 1.556.
+    Уменьшение отступа тихо превратило бы голову в «человека» и оставило бы
+    лицо под размытой лишь верхней третью.
+    """
+    ro = _render_overlay()
+    src = (ROOT / "scripts" / "render_overlay.py").read_text(encoding="utf-8")
+    assert "1.7 * w" not in src, "вернулась догадка о виде рамки по пропорции"
+    assert ro.KIND_HEAD != ro.KIND_PERSON
+
+    kp = _FakeKeypoints(xy=[[[300, 200], [295, 195], [305, 195],
+                             [288, 198], [312, 198]]],
+                        conf=[[0.9, 0.9, 0.9, 0.9, 0.9]])
+    kinds = [k for _, k in ro._boxes_union(
+        [_FakeModel([(270, 170, 330, 360)], kp)], _sharp_frame(), {"imgsz": 640})]
+    assert ro.KIND_PERSON in kinds and ro.KIND_HEAD in kinds, (
+        f"ожидались обе метки, получено {kinds}")
 
 
 # --------------------------------------------------------------------------- #
