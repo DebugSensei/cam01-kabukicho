@@ -175,10 +175,12 @@ I18N = {
     "nav.overlay":     ("Overlay video", "Оверлей", "オーバーレイ"),
     "nav.frames":      ("Screenshots", "Скриншоты", "スクリーンショット"),
     "nav.bench":       ("Benchmark", "Бенчмарк", "ベンチマーク"),
-    # out/report.html — артефакт этапа S9 по контракту, и до сих пор на него
-    # не вела ни одна ссылка: единственная страница, где у каждого числа
-    # напечатан compute_ref, была недостижима из интерфейса.
-    "nav.report":      ("Provenance", "Провенанс", "来歴"),
+    # nav.report убран сознательно. out/report.html остаётся артефактом S9
+    # по контракту и собирается каждым прогоном, но с дашборда не линкуется и
+    # на Pages не публикуется: страница показывает внутреннюю кухню — какая
+    # функция посчитала какое число — и грузит читателя ею вместо результата.
+    # Провенанс никуда не делся: он в sha входов, в файлах разметки и
+    # калибровки в репозитории и в строке подвала.
     "nav.theme":       ("Light / Dark", "Светлая / Тёмная", "ライト / ダーク"),
 
     "hero.eyebrow":  ("Storefront attention", "Внимание к витринам", "店舗への注目"),
@@ -356,6 +358,14 @@ I18N = {
                       "в несколько",
                       "各ゾーンに入った追跡数。1追跡が複数ゾーンに入ることがあります"),
     "dist.attn":    ("Attention time", "Время внимания", "注目時間"),
+    "prov.foot": ("Geometry and zone markup are committed to the repository; "
+                  "every artifact carries the sha of its inputs.",
+                  "Геометрия и разметка зон лежат в репозитории; каждый артефакт "
+                  "несёт sha своих входов.",
+                  "幾何情報とゾーン定義はリポジトリに含まれ、各成果物は入力の"
+                  "sha を保持します。"),
+    "prov.link": ("How provenance is recorded", "Как устроен провенанс",
+                  "来歴の記録方法"),
     "sec.foot.eyebrow": ("Footfall", "Поток", "人流"),
     "sec.foot.title":   ("Presence over time", "Присутствие во времени",
                          "時間帯別の在圏"),
@@ -644,6 +654,11 @@ code{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;
 #lb img.small{height:min(78vh,900px);image-rendering:pixelated}
 #lb .meta{color:#c9d3e2;font-size:13px;text-align:center;max-width:80ch}
 
+/* ---- подвал провенанса -------------------------------------------------- */
+footer.prov{margin:34px 0 10px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:13px;line-height:1.6}
+footer.prov a{color:var(--accent);margin-left:6px}
+
 /* ---- встроенный плеер --------------------------------------------------- */
 /* Обёртка с фиксированной пропорцией 16:9. Без неё iframe пришлось бы задавать
    в пикселях, и на телефоне он вылезал бы за экран или оставлял поля. */
@@ -818,7 +833,7 @@ JS = """
 #: ни переключателя темы.
 NAV = [("dashboard.html", "nav.dash"), ("replay.html", "nav.replay"),
        ("overlay.mp4", "nav.overlay"), ("frames.html", "nav.frames"),
-       ("benchmark.html", "nav.bench"), ("report.html", "nav.report")]
+       ("benchmark.html", "nav.bench")]
 
 THEME_SVG = (
     '<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -840,7 +855,7 @@ PUBLIC_VIDEO_ID = "3ZXDQcmrOUI"
 
 #: Что публикуется на Pages. Остальные страницы существуют только локально,
 #: и вести на них из публичной шапки значило бы обещать несуществующее.
-PUBLIC_PAGES = {"dashboard.html", "benchmark.html", "report.html"}
+PUBLIC_PAGES = {"dashboard.html", "benchmark.html"}
 
 #: Выставляется один раз из main() при --public. Модульный, а не параметр:
 #: header_html зовут четыре скрипта, и протаскивать флаг через все — шум.
@@ -1565,6 +1580,10 @@ ground edge; the id of the person is printed next to it">
   <tr><th>{t("th.item")}</th><th>{t("th.what")}</th><th>{t("th.conseq")}</th></tr>
   {''.join(lim_rows)}</table></div></div>
 </section>
+
+<footer class="prov">{t("prov.foot")}
+  <a href="https://github.com/DebugSensei/cam01-kabukicho#provenance"
+     target="_blank" rel="noopener">{t("prov.link")}</a></footer>
 </div>
 
 <div id="lb"><img id="lbimg" alt=""><div class="meta" id="lbmeta"></div></div>

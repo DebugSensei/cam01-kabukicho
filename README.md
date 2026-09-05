@@ -43,8 +43,8 @@ Final run, `raw/peak_hour.ts`, 2026-09-04.
 
 Every metric in `out/metrics.json` carries its source stage, its source artifact and a
 `compute_ref` — the file, function and line that computed it. `out/report.html` renders
-that reference for 6 of the 22; the dashboard shows stage and artifact but never the
-`compute_ref`.
+that reference for 6 of the 22; it is built by every run and is not published, for the
+reason given under [Provenance](#provenance).
 
 ---
 
@@ -446,6 +446,38 @@ projected jitter of the foot point is 10–20 cm; because speed is a magnitude, 
 does not cancel under averaging — it pushes the median up. On synthetic tracks with a
 true speed of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS
 slope over the whole burst.
+
+---
+
+## Provenance
+
+Two files that no stage can regenerate ship with the repository, because without
+them nothing on the dashboard can be traced back to anything:
+
+- [`zones/zones.json`](zones/zones.json) — the four storefronts and the ROI, traced by
+  hand once on the reference frame. Twenty clicks; no code produces it.
+- [`calib/homography.json`](calib/homography.json) — the geometry every metre rests on.
+  S1 writes it, but re-running S1 today yields a different one, so this file is the only
+  record of the geometry the published numbers were computed with.
+
+**Every artifact carries the sha256 of its inputs.** `write_parquet` stores
+`{path: sha256}` of the stage's declared inputs in the parquet file metadata, and
+`check_inputs_sha` compares what an artifact remembers against what is on disk now. The
+S1, S4, S5, S6 and S7 gates fail on a mismatch, and an artifact that recorded nothing
+fails too — silence is not a pass. `tests/test_inputs_sha.py` pins the case the
+mechanism exists for: write an artifact, change the input, the check must fail.
+
+This is not decoration. It caught the worst defect in the project: S1 draws its
+pedestrian sample from `det/frames.parquet`, which S3 overwrites, so the published
+calibration was computed from a detections file that no longer exists — see
+[How errors were found](#how-errors-were-found). The S1 gate now fails that check on
+purpose, and the failure is left standing.
+
+Each metric in `out/metrics.json` also carries its source stage, that stage's quality
+metric and a `compute_ref` — file, function and line. `out/report.html` renders those
+for six of the twenty-two. That page is built by every run but is **not published**: it
+is the internal engineering report, and a reader who came for the result should not have
+to walk through which function computed which number to reach it.
 
 ---
 
