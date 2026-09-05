@@ -1130,3 +1130,68 @@ determine the two headline numbers of the report.
 **The anonymisation blocker was cleared by code, not by a person.** The parameters are
 checked by tests and contact sheets; confirmation by the owner on real crops remains his
 to give.
+
+## 11. Prose audits: commit messages and the README
+
+The code was checked by gates and tests from the beginning. The prose — the commit
+messages and the README — was checked by nothing, and that turned out to be the most
+productive hole in the process across the whole project.
+
+### 11.1. Commit messages against the repository
+
+After the history was squashed into 12 commits, the messages were read back against
+the code and the artifacts. **Five claims did not hold**, and all five had been
+written by me on the same day:
+
+| Commit | What it claimed | What is actually there |
+|---|---|---|
+| S0 ingest | records the stream, checks for gaps in the segments, fps and resolution | `s0_ingest.py` is 28 lines of scaffold, `status=not_implemented`, zero recording calls |
+| Scaffold | "faces are already anonymised, nothing identifiable reaches disk" | 173 of 257 crops at a threshold of 0.22, which the owner had rejected |
+| S1 | scale cross-checked two independent ways | the artifact holds neither `pilot_speeds_mps` nor `facade_baselines`; it says itself that one check remains |
+| S2 | the ROI drops a track before the attention stage | the word `roi` appears in neither `s4_track.py` nor `s5_orient.py`; the ROI only trims pictures |
+| Scaffold | every artifact's schema is pinned in CONTRACTS.md | `attn/track_zone_frames.parquet` had no contract, with four consumers |
+
+Four wordings were rewritten. The fifth was fixed on the substance: section 8.2 was
+added to `docs/CONTRACTS.md`.
+
+### 11.2. The README against the code
+
+Then every claim the README makes about what the system can do was read against the
+code that has to implement it. **Fifteen did not hold.** Two are worth naming:
+
+- **"Every stage has a gate"** — **two gates of the ten** compute a metric. The other
+  eight print honestly what they cannot do and return 1. In the terminal that was
+  visible; in the README it was not.
+- **"Zone entry: tracks whose ground position enters a storefront's apron
+  polygon"** — no such metric exists. `visitors_*` counts tracks that came within
+  8 m of the facade, and **the two quantities differ by a factor of thirty**.
+
+The rest are of the same kind: a manual step described as automatic, a stale test
+count, `make run-all` without S0 and S7, "no face imagery" with two street frames in
+`docs/img`, and `zones/zones.json` absent from the repository when S2 will not start
+without it.
+
+All twenty were fixed before publication.
+
+### 11.3. Caveat: one slice went through without an adversarial check
+
+The README audit ran in four slices, and every finding was meant to face an
+independent attempt to refute it. For one slice that attempt **did not run** — it hit
+the session limit. Its findings were closed anyway, and the key facts (the number of
+working gates, what `make run-all` covers, the absence of `zones.json` and of
+`torch`) were re-checked by hand with commands.
+
+The check was run separately later. The caveat stays here as it is: the decision to
+act on unverified findings was taken before it, and recording that is more honest
+than pretending after the fact that the order was right.
+
+### 11.4. What follows from this
+
+Prose about a system drifts from the system faster than the system drifts from
+itself. Gates catch regressions in the code; nobody looks at the README, and it goes
+quietly stale with every change that touches it. Twenty discrepancies against nine
+code defects is a ratio, not an accident.
+
+A mechanical re-read of the prose against the code is cheap and finds a lot. On the
+next project it belongs in the same row as the tests, rather than being done once
+before publication.

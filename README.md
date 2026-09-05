@@ -145,10 +145,12 @@ the previous stage's artifact and writes its own. The schemas in
 [`docs/CONTRACTS.md`](docs/CONTRACTS.md) are the API; a column with spatial meaning and
 no `_px` / `_m` suffix is a review error.
 
-**Every stage has a gate script, and two of them compute anything.**
-`verify/verify_s1.py` and `verify/verify_s5.py` measure and print their metrics; the
-other eight name the metric they cannot compute, return 1 and say so. All ten currently
-fail. `verify/verify_s<N>.py` returns 0 or 1 and prints its
+**Every stage has a gate script; two of them compute their gate metric.**
+`verify/verify_s1.py` and `verify/verify_s5.py` measure and print theirs. Three more —
+S4, S6 and S7 — compute no gate metric but do run one real check, comparing the sha256
+of every recorded input against the file on disk, and that check decides their exit code
+under `--allow-unmeasured`. The remaining five name the metric they cannot compute,
+return 1 and say so. All ten currently fail. `verify/verify_s<N>.py` returns 0 or 1 and prints its
 metrics. "I checked it visually" is not a gate. A threshold is never nudged to make a
 gate pass — the reason for the failure goes in
 [`docs/DECISIONS.md`](docs/DECISIONS.md) first.
@@ -424,7 +426,7 @@ entry: tracks whose ground position enters a storefront's apron polygon" describ
 metric that does not exist: `visitors_*` counts tracks that came within 8 m of the
 facade, and the two quantities **differ by a factor of thirty**. The rest were of the
 same kind — a manual step described as automatic, a stale test count, a claim of no face
-imagery while two street frames sat in `docs/img`.
+imagery while three street frames sat unblurred in `docs/img`.
 
 Every one of the twenty was fixed before publication. The finding rate says something
 uncomfortable and worth saying plainly: prose about a system drifts from the system
@@ -443,7 +445,7 @@ slope over the whole burst.
 ## Quickstart
 
 ```bash
-pip install torch==2.11.0 torchvision==0.26.0 \n  --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
+pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
 pip install -r requirements.txt
 python -m pytest tests/ -o addopts="" -q     # 101 passed, 2 skipped on a fresh clone
 make serve                                    # http://localhost:8080, serves out/
@@ -529,10 +531,21 @@ the model is nevertheless not a one-file change — Ultralytics is also construc
 `looq/stages/s1_calib.py` (the pose model that fixes the metric scale) and imported in
 `looq/stages/s4_track.py` (`BYTETracker`), plus two helper scripts.
 
-Source footage is a third-party public live stream. Two frames of it are committed as
-figures in `docs/img/` — the overlay still and the zone reference — and they are not
-anonymised, being a re-publication of an already public stream rather than evidence
-crops. Beyond those, this repository contains no raw
+Source footage is a third-party public live stream. Three frames of it are committed as
+figures in `docs/img/` — the overlay still, the zone reference and the vanishing-point
+frame — and all three **are** anonymised: `scripts/anonymise_figures.py` runs the
+detector over each and applies the same `looq/evidence.py::blur_face_region` used on the
+evidence crops, at a deliberately low detector threshold because a blurred lamppost
+costs nothing and a missed face costs everything. `docs/img/dashboard.webp` embeds 48
+evidence crops of real people, blurred by the same function.
+
+One honest limit on that: the blur covers the top 30 % of a person's box, so a head
+sitting lower in the frame than the box implies is not structurally guaranteed to be
+covered. Measured on the committed figures, no confident facial keypoint survives in a
+sharp region — but the mechanism is a band, not a face detector, and "no face imagery"
+rests on that measurement rather than on the design.
+
+Beyond those, this repository contains no raw
 video, no unblurred crops and no face imagery: `raw/`, `*.ts`, `*.mp4` and `*.pt` are
 excluded by `.gitignore`, and every published crop passes through
 `looq/evidence.py::blur_face_region` — pixelation followed by a Gaussian — before it

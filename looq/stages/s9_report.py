@@ -27,7 +27,7 @@ import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.geometry import ORIENTATION_DISCLAIMER
-from looq.evidence import EvidenceError
+from looq.evidence import EvidenceError, blur_face_region
 from looq.io import ConfigError, RunManifest, atomic_write_text, load_config, read_json, require
 from looq.stages._base import StageError, read_artifact_status
 
@@ -154,10 +154,32 @@ def _contact_sheet(index_path: Path, claim_id: str, max_n: int,
         return None
     cw, ch = cell
     cells = []
+    # Кропы на диске писались разными прогонами и несут разные пороги
+    # обезличивания. Страница обязана показывать ТЕКУЩИЙ порог независимо от
+    # того, когда кроп записан: три из четырёх листов иначе показывали 0.22,
+    # который владелец забраковал. Повторное размытие уже размытого безвредно.
+    priv = load_config("configs/evidence.yaml").get("privacy") or {}
+    need = ("face_blur_top_frac", "blur_kernel_frac", "blur_sigma_frac",
+            "pixelate_factor")
+    missing = [k for k in need if k not in priv]
+    if missing:
+        raise StageError(
+            f"в configs/evidence.yaml нет ключей приватности {missing}: "
+            f"вшивать кропы, не зная порога обезличивания, нельзя (правило 9)")
+
     for _, r in df.iterrows():
         img = cv2.imread(str(r["path"]))
         if img is None:
             continue
+        try:
+            img, _ = blur_face_region(
+                img,
+                top_frac=float(priv["face_blur_top_frac"]),
+                kernel_frac=float(priv["blur_kernel_frac"]),
+                sigma_frac=float(priv["blur_sigma_frac"]),
+                pixelate_factor=int(priv["pixelate_factor"]))
+        except EvidenceError:
+            pass          # область уже однородна: кроп обезличен своей стадией
         hgt, wid = img.shape[:2]
         sc = min(cw / wid, ch / hgt)
         res = cv2.resize(img, (max(1, int(wid * sc)), max(1, int(hgt * sc))),

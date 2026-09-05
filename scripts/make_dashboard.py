@@ -31,9 +31,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from looq.evidence import EvidenceSampler, EvidenceWriter  # noqa: E402
 from looq.io import atomic_write_text, load_config, read_json, require  # noqa: E402
-from looq.evidence import EvidenceError, blur_face_region  # noqa: E402
+from looq.evidence import (EvidenceError, EvidenceSampler,  # noqa: E402
+                           EvidenceWriter, blur_face_region)
 from looq.pilot import iter_frames  # noqa: E402
 
 OUT = Path("out/dashboard.html")
@@ -846,6 +846,12 @@ def esc(x) -> str:
     return html.escape("" if x is None else str(x))
 
 
+def _priv_top_frac() -> float:
+    """Порог обезличивания, который применяется ПРИ ВСТРАИВАНИИ."""
+    return float((load_config("configs/evidence.yaml").get("privacy") or {})
+                 .get("face_blur_top_frac", 0.0))
+
+
 def b64_img(path: Path, max_w: int | None = None, quality: int = 92,
             anonymise: bool = False) -> str | None:
     """Картинка в data-URI. Пруфы вшиваются ПО ОДНОМУ, а не монтажом: монтаж
@@ -862,6 +868,15 @@ def b64_img(path: Path, max_w: int | None = None, quality: int = 92,
         return None
     if anonymise:
         priv = load_config("configs/evidence.yaml").get("privacy") or {}
+        need = ("face_blur_top_frac", "blur_kernel_frac", "blur_sigma_frac",
+                "pixelate_factor")
+        missing = [k for k in need if k not in priv]
+        if missing:
+            # Правило 8: молча отдать кроп с диска, не зная порога, значило бы
+            # опубликовать его с тем размытием, какое случайно оказалось.
+            raise SystemExit(
+                f"в configs/evidence.yaml нет ключей приватности {missing}: "
+                f"вшивать пруфы без порога обезличивания нельзя")
         try:
             img, _ = blur_face_region(
                 img,
@@ -869,11 +884,8 @@ def b64_img(path: Path, max_w: int | None = None, quality: int = 92,
                 kernel_frac=float(priv["blur_kernel_frac"]),
                 sigma_frac=float(priv["blur_sigma_frac"]),
                 pixelate_factor=int(priv["pixelate_factor"]))
-        except (KeyError, EvidenceError):
-            # KeyError — конфиг без ключей приватности, это ошибка настройки.
-            # EvidenceError — область уже однородна, размывать нечего.
-            # Кроп на диске в любом случае уже обезличен своей стадией.
-            pass
+        except EvidenceError:
+            pass          # область уже однородна: кроп обезличен своей стадией
     if max_w and img.shape[1] > max_w:
         s = max_w / img.shape[1]
         img = cv2.resize(img, (max_w, int(img.shape[0] * s)), interpolation=cv2.INTER_AREA)
@@ -910,9 +922,17 @@ def sheet_html(rows, note: str) -> str:
             ex = json.loads(r.get("extra_json") or "{}")
         except (ValueError, TypeError):
             ex = {}
+        # blur_top_frac из индекса — это порог, с которым кроп ЗАПИСАН, а
+        # показывается он переразмытым по текущему. Печатать записанный
+        # означало бы подписать под пикселями чужое число, на странице,
+        # которая продаёт прослеживаемость. Показываем оба.
+        written = ex.pop("blur_top_frac", None)
         meta = (f"track #{int(r['track_id'])} · frame {int(r['frame_idx'])} · "
                 f"t={float(r['ts']):.1f}s · stratum {int(r['stratum'])}"
-                + (f" · {json.dumps(ex, ensure_ascii=False)}" if ex else ""))
+                + (f" · {json.dumps(ex, ensure_ascii=False)}" if ex else "")
+                + (f" · blur {_priv_top_frac():.2f} applied here"
+                   f" (written at {float(written):.2f})" if written is not None
+                   else ""))
         cells.append(f'<img src="{uri}" alt="proof frame" data-meta="{esc(meta)}">')
     if not cells:
         return '<div class="none">no proof frames for this claim</div>'
