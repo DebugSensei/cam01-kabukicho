@@ -803,6 +803,24 @@ THEME_SVG = (
     '<path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8z"/></svg>')
 
 
+#: Ссылка на видео в публичной сборке. mp4 в репозиторий не кладётся, и
+#: относительная ссылка на него на Pages вела бы в 404.
+PUBLIC_VIDEO_URL = "https://youtu.be/3ZXDQcmrOUI"
+
+#: Что публикуется на Pages. Остальные страницы существуют только локально,
+#: и вести на них из публичной шапки значило бы обещать несуществующее.
+PUBLIC_PAGES = {"dashboard.html", "benchmark.html", "report.html"}
+
+#: Выставляется один раз из main() при --public. Модульный, а не параметр:
+#: header_html зовут четыре скрипта, и протаскивать флаг через все — шум.
+PUBLIC_BUILD = False
+
+
+def set_public_build(on: bool) -> None:
+    global PUBLIC_BUILD
+    PUBLIC_BUILD = bool(on)
+
+
 def header_html(current: str, chips) -> str:
     """Шапка страницы. current — имя текущего файла, чтобы не вести на себя."""
     ch = "".join(
@@ -813,6 +831,15 @@ def header_html(current: str, chips) -> str:
     for href, key in NAV:
         if href == current:
             continue
+        if PUBLIC_BUILD:
+            # Видео уезжает на YouTube, остальное неопубликованное выпадает.
+            if key == "nav.overlay":
+                links.append(f'<a class="btn pri" href="{PUBLIC_VIDEO_URL}" '
+                             f'target="_blank" rel="noopener">&#9654; '
+                             f'<span class="lbl">{t(key)}</span></a>')
+                continue
+            if href not in PUBLIC_PAGES:
+                continue
         pri = " pri" if key == "nav.replay" else ""
         icon = "&#9654; " if key == "nav.replay" else ""
         links.append(f'<a class="btn{pri}" href="{href}">{icon}'
@@ -1110,7 +1137,13 @@ def main(argv=None) -> int:
     ap.add_argument("--config", default="configs/s3_detect.yaml")
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--n", type=int, default=N_PROOFS)
+    ap.add_argument("--public", action="store_true",
+                    help="сборка для публичного Pages: только сетки витрин. "
+                         "Архив пруфов и сетки цвета НЕ СОБИРАЮТСЯ — не "
+                         "прячутся стилями, а не попадают в разметку. "
+                         "Обоснование в docs/DECISIONS.md")
     args = ap.parse_args(argv)
+    set_public_build(args.public)
 
     import pandas as pd
 
@@ -1220,7 +1253,7 @@ def main(argv=None) -> int:
        <div class="l">median agreement (votes x pixels)</div></div>
   <div><div class="n">{int(sub['n_crops_used'].median())}</div>
        <div class="l">median crops per track</div></div>
-</div>{sheet_html(rows, t("cap.color"))}</div>""")
+</div>{"" if args.public else sheet_html(rows, t("cap.color"))}</div>""")
 
     s_floor = float(load_config("configs/s7_attrs.yaml")["attrs"]["s_achromatic_max"])
     chromatic = int((ok_attr["hsv_s"] >= s_floor).sum())
@@ -1236,7 +1269,9 @@ def main(argv=None) -> int:
         pass
 
     archive = []
-    for claim, g in ev.groupby("claim_id"):
+    # В публичной сборке архива НЕТ. Не скрыт, а не построен: спрятанный
+    # стилями архив всё равно уехал бы в HTML и читался бы в исходнике.
+    for claim, g in ([] if args.public else ev.groupby("claim_id")):
         rows = g.sort_values("stratum").head(args.n).to_dict("records")
         archive.append(f"""<div class="card">
 <div class="zname" style="font-size:14px"><code>{esc(claim)}</code></div>
@@ -1486,6 +1521,16 @@ ground edge; the id of the person is printed next to it">
 <script>window.__I18N__ = {i18n_json};</script>
 <script>{JS}</script></html>"""
 
+    if args.public:
+        n_emb = page.count("data:image/jpeg;base64")
+        bad = [h for h, _ in NAV
+               if h not in PUBLIC_PAGES and not h.startswith("http")
+               and f'href="{h}"' in page]
+        if bad:
+            raise SystemExit(
+                f"публичная страница ссылается на неопубликованное: {bad}")
+        print(f"[dashboard] ПУБЛИЧНАЯ СБОРКА: кропов вшито {n_emb}, "
+              f"архив и сетки цвета не собраны")
     atomic_write_text(args.out, page)
     print(f"готово: {args.out} ({args.out.stat().st_size / 1e6:.2f} МБ)")
     print(f"  треков {n_tracks}, повёрнутых {lookers}, остановившихся {stoppers}")

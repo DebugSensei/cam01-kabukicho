@@ -1,0 +1,393 @@
+<!doctype html><html lang="en" data-theme="light"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAM-01 benchmark</title><style>
+:root{
+  --bg:#f5f6f8; --panel:#fff; --ink:#0f1622; --muted:#6b7482; --line:#e6e9ef;
+  --accent:#2f6bff; --accent-soft:#eaf0ff; --warn-bg:#fff8e6; --warn-line:#f2d492;
+  --warn-ink:#6b4f10; --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.05);
+}
+:root[data-theme="dark"]{
+  --bg:#0c1017; --panel:#151b26; --ink:#e8ecf3; --muted:#93a0b4; --line:#232c3b;
+  --accent:#5b8bff; --accent-soft:#1a2440; --warn-bg:#2a2311; --warn-line:#5c4a1c;
+  --warn-ink:#f0d79a; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 24px 80px}
+header{position:sticky;top:0;z-index:40;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+/* Шапка держится в ОДНУ полоску. Прежний flex-wrap ронял языки и тему на
+   вторую строку, как только подписи удлинялись: RU и JA длиннее EN. Чипы
+   ужимаются и прячутся на узких экранах, навигация не ужимается никогда. */
+.hd{max-width:1280px;margin:0 auto;padding:12px 20px;display:flex;
+  align-items:center;gap:10px;flex-wrap:nowrap}
+.hd .chip{flex:0 1 auto;min-width:0}
+.hd .chip .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.navgrp{display:flex;align-items:center;gap:9px;flex:none;margin-left:auto}
+@media(max-width:1180px){.hd .chip:not(.keep){display:none}}
+@media(max-width:900px){.hd .chip{display:none}}
+/* На телефоне шапка ОБЯЗАНА переноситься: держать её в одну строку там
+   означало бы вытолкнуть кнопки за экран. Одна полоска — требование
+   настольной ширины, а не всех подряд. */
+@media(max-width:720px){
+  .hd{flex-wrap:wrap;row-gap:8px;padding:10px 14px}
+  .navgrp{margin-left:0;width:100%;justify-content:flex-start;
+    /* min-width:0 обязателен: flex-элемент по умолчанию не сжимается ниже
+       ширины содержимого, и overflow-x на нём не включается — вместо
+       прокрутки внутри группы разъезжалось всё тело страницы. */
+    min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    padding-bottom:2px}
+  .navgrp::-webkit-scrollbar{height:0}
+  .navgrp .btn{flex:none}
+  .logo{font-size:16px}
+}
+.logo{font-weight:800;letter-spacing:.22em;font-size:19px}
+.chip{border:1px solid var(--line);border-radius:12px;padding:7px 14px;line-height:1.25}
+.chip .k{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.chip .v{font-weight:650;font-size:14px}
+.sp{flex:1}
+.langs{display:inline-flex;border:1px solid var(--line);border-radius:999px;
+  overflow:hidden}
+.lang{border:0;background:var(--panel);color:var(--muted);font:inherit;
+  font-weight:700;font-size:12px;padding:8px 12px;cursor:pointer}
+.lang.on{background:var(--accent);color:#fff}
+/* Переключатель темы — иконка, а не надпись: он крайний справа и не должен
+   переезжать на вторую строку вместе с длинными подписями языков. */
+.icobtn{width:38px;height:38px;padding:0;border-radius:50%;display:inline-flex;
+  align-items:center;justify-content:center;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);cursor:pointer;flex:none}
+.icobtn:hover{border-color:var(--accent);color:var(--accent)}
+.icobtn svg{width:19px;height:19px;display:block}
+/* Солнце видно в светлой теме, луна в тёмной: кнопка показывает ТЕКУЩЕЕ
+   состояние, а не то, куда переключит. */
+.icobtn .moon{display:none}
+:root[data-theme="dark"] .icobtn .sun{display:none}
+:root[data-theme="dark"] .icobtn .moon{display:block}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  border-radius:999px;padding:8px 16px;font:inherit;font-weight:600;font-size:13px;
+  cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{opacity:.9;color:#fff}
+h1{font-size:36px;line-height:1.15;margin:34px 0 8px;letter-spacing:-.02em}
+h2{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+.eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin-bottom:6px}
+.sub{color:var(--muted);margin:0 0 26px;max-width:78ch}
+section{margin:34px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:20px;box-shadow:var(--shadow)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:16px}
+.kpi .lab{font-size:12px;color:var(--muted);margin-bottom:8px}
+.kpi .big{font-size:42px;font-weight:750;letter-spacing:-.03em;line-height:1}
+.kpi .note{font-size:12px;color:var(--muted);margin-top:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(292px,1fr));gap:16px}
+.zname{display:flex;align-items:flex-start;gap:9px;font-weight:700;font-size:16px;
+  line-height:1.3}
+.zname .dot{margin-top:5px}
+/* Длинное название витрины переносилось и сдвигало процент вниз, из-за чего
+   карточки выходили разной высоты и сетка выглядела сломанной. Фиксируем
+   высоту блока имени: две строки помещаются, третья обрезается многоточием. */
+.zhead{min-height:44px;display:flex;align-items:flex-start;gap:9px}
+.zhead .nm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
+.card{display:flex;flex-direction:column}
+.dot{width:11px;height:11px;border-radius:3px;flex:none}
+.pct{font-size:46px;font-weight:750;letter-spacing:-.03em;line-height:1;margin:12px 0 2px}
+.ci{font-size:12px;color:var(--muted)}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 4px;
+  padding-top:14px;border-top:1px solid var(--line)}
+.mini .n{font-size:19px;font-weight:700}
+.mini .l{font-size:11px;color:var(--muted)}
+.sheet{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-top:12px}
+.sheet img{width:100%;height:88px;object-fit:cover;border-radius:5px;
+  background:var(--bg);cursor:zoom-in;border:1px solid var(--line)}
+.cap{font-size:11px;color:var(--muted);margin-top:8px}
+.none{font-size:12px;color:var(--muted);border:1px dashed var(--line);
+  border-radius:9px;padding:14px;text-align:center;margin-top:12px}
+.bar{display:flex;height:44px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.bar div{display:flex;align-items:center;justify-content:center;font-size:12px;
+  font-weight:700;color:#0f1622;min-width:2px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);
+  border-radius:14px;padding:16px 18px;font-size:13.5px}
+.warn b{font-size:14.5px}
+.warn div{margin:6px 0}
+img.fig{width:100%;border-radius:11px;border:1px solid var(--line);cursor:zoom-in;
+  background:var(--panel);display:block}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);
+  vertical-align:top}
+th{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  font-weight:600}
+code{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;
+  background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:820px){.two{grid-template-columns:1fr}
+  .sheet{grid-template-columns:repeat(4,1fr)}}
+
+
+.fn{display:grid;grid-template-columns:210px 1fr 120px;gap:10px;align-items:center;
+  padding:9px 0;border-bottom:1px solid var(--line)}
+.fn:last-child{border-bottom:0}
+.fn-l{font-weight:650;font-size:13.5px}
+.fn-bar{background:var(--accent-soft);border-radius:6px;height:16px;overflow:hidden}
+.fn-bar i{display:block;height:100%;background:var(--accent)}
+.fn-v{text-align:right;font-weight:750;font-variant-numeric:tabular-nums}
+.fn-v small{color:var(--muted);font-weight:600;font-size:11px}
+.fn-n{grid-column:1/-1;font-size:11px;color:var(--muted);margin-top:-4px}
+.hb{display:grid;grid-template-columns:150px 1fr 54px;gap:10px;align-items:center;
+  padding:7px 0}
+.hb-l{font-size:13px}
+.hb-bar{background:var(--accent-soft);border-radius:5px;height:12px;overflow:hidden}
+.hb-bar i{display:block;height:100%;background:var(--accent)}
+.hb-v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+/* Единица измерения обязана быть на самой карточке: рядом стоят числа,
+   считающие РАЗНОЕ, и без метки читатель их сложит. */
+.card{position:relative}
+.unit{position:absolute;top:14px;right:14px;font-size:10px;font-weight:800;
+  letter-spacing:.09em;padding:3px 8px;border-radius:999px;
+  background:var(--accent-soft);color:var(--accent)}
+.dleg{display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.dleg span{display:inline-flex;align-items:center;gap:8px}
+#lb{position:fixed;inset:0;background:rgba(8,11,17,.93);display:none;z-index:99;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px;
+  padding:28px;cursor:zoom-out}
+#lb.on{display:flex}
+/* Кропы крошечные — 30x98 у дальних людей. Заданные только максимумы
+   означали, что картинка открывается 1:1, то есть маркой на весь экран,
+   хотя подпись обещает «открыть крупно». Тянем по высоте.
+   image-rendering:pixelated намеренно: увеличение в 6-8 раз сглаживанием
+   ДОРИСОВАЛО БЫ детали, которых в данных нет. Честнее показать пиксели. */
+#lb img{max-width:94vw;max-height:86vh;width:auto;height:auto;object-fit:contain;
+  border-radius:9px;background:#000}
+/* Мелкие кропы тянем по высоте и показываем пикселями: увеличение в семь раз
+   сглаживанием дорисовало бы детали, которых в данных нет. Широкие кадры
+   оверлея (16:9) наоборот тянем по ширине и сглаживаем. */
+#lb img.small{height:min(78vh,900px);image-rendering:pixelated}
+#lb .meta{color:#c9d3e2;font-size:13px;text-align:center;max-width:80ch}
+
+/* ---- бургер ------------------------------------------------------------ */
+/* На телефоне восемь кнопок в строку не помещаются никак: горизонтальная
+   прокрутка внутри шапки прятала половину из них за краем, и найти язык или
+   тему было нельзя. Всё уезжает в меню. */
+.burger{display:none;width:38px;height:38px;padding:0;border-radius:11px;
+  align-items:center;justify-content:center;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);cursor:pointer;flex:none;
+  margin-left:auto}
+.burger svg{width:20px;height:20px;display:block}
+.burger .x{display:none}
+.burger[aria-expanded="true"] .x{display:block}
+.burger[aria-expanded="true"] .bars{display:none}
+.burger[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+@media(max-width:720px){
+  .hd{position:relative}
+  .burger{display:inline-flex}
+  .navgrp{display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:stretch;gap:8px;
+    background:var(--panel);border-bottom:1px solid var(--line);
+    padding:12px 14px 16px;box-shadow:var(--shadow);z-index:50;
+    margin-left:0;width:auto;overflow:visible}
+  .navgrp.open{display:flex}
+  .navgrp .btn{justify-content:center;padding:11px 16px;font-size:14px}
+  .navgrp .lbl{display:inline}
+  .langs{align-self:stretch}
+  .lang{flex:1;padding:11px 0;font-size:13px}
+  .icobtn{width:auto;height:auto;border-radius:999px;padding:11px 16px;
+    gap:9px;font:inherit;font-weight:600;font-size:14px}
+  .icobtn::after{content:attr(data-label)}
+}
+
+/* ---- адаптив ---------------------------------------------------------- */
+/* Широкое содержимое прокручивается ВНУТРИ своего контейнера. Тело страницы
+   не должно ехать по горизонтали ни на одной ширине: у бенчмарка таблица на
+   четыре колонки выносила body на 613 px при экране 390. */
+.tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;
+  /* .card это flex-контейнер, а flex-элемент не сжимается ниже ширины
+     содержимого без min-width:0 — та же причина, по которой не включалась
+     прокрутка в шапке. Без него таблица 540 px разъезжала всю страницу. */
+  min-width:0;max-width:100%}
+.tbl table{min-width:540px}
+@media(max-width:900px){
+  .wrap{padding:0 16px 60px}
+  h1{font-size:30px;margin-top:26px}
+  h2{font-size:20px}
+  .card{padding:16px}
+  .fn{grid-template-columns:1fr;gap:4px}
+  .fn-bar{order:3}
+  .fn-v{text-align:left;order:2}
+  .hb{grid-template-columns:110px 1fr 46px}
+}
+@media(max-width:560px){
+  .wrap{padding:0 12px 48px}
+  h1{font-size:25px;line-height:1.2}
+  h2{font-size:18px}
+  .kpi .big{font-size:34px}
+  .pct{font-size:38px}
+  .card{padding:14px;border-radius:13px}
+  .sheet{grid-template-columns:repeat(3,1fr);gap:4px}
+  .sheet img{height:74px}
+  .mini{grid-template-columns:1fr 1fr;gap:8px}
+  .bar{height:38px}
+  .legend{gap:10px;font-size:12px}
+  .gal{grid-template-columns:1fr}
+  #lb{padding:14px}
+  #lb img{max-height:74vh}
+  .unit{top:10px;right:10px}
+}
+@media(max-width:380px){
+  .sheet{grid-template-columns:repeat(2,1fr)}
+  .hb{grid-template-columns:1fr 1fr}
+  .hb-bar{grid-column:1/-1}
+}
+
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;
+  white-space:nowrap}
+table td{font-size:13px}
+.t1{border-left:4px solid #22c55e} .t2{border-left:4px solid #f59e0b}
+.t3{border-left:4px solid #ef4444}
+</style>
+<header><div class="hd">
+  <div class="logo">LOOQ</div><div class="chip keep"><div class="k"><span data-i18n="nav.camera">Camera</span></div><div class="v">CAM-01 Kabukicho</div></div><div class="chip"><div class="k"><span data-i18n="nav.window">Window</span></div><div class="v">60 min</div></div>
+  <button class="burger" id="burger" aria-expanded="false"
+          aria-label="Menu"
+          title="Menu"><svg class="bars" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <span class="navgrp"><a class="btn" href="dashboard.html"><span class="lbl"><span data-i18n="nav.dash">Dashboard</span></span></a><a class="btn pri" href="https://youtu.be/3ZXDQcmrOUI" target="_blank" rel="noopener">&#9654; <span class="lbl"><span data-i18n="nav.overlay">Overlay video</span></span></a><a class="btn" href="report.html"><span class="lbl"><span data-i18n="nav.report">Provenance</span></span></a>
+    <span class="langs">
+      <button class="lang on" data-lang="en">EN</button>
+      <button class="lang" data-lang="ru">RU</button>
+      <button class="lang" data-lang="ja">JA</button>
+    </span>
+    <button class="icobtn" id="theme" title="Light / Dark"
+            aria-label="Light / Dark"
+            data-label="Light / Dark"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9 1.9"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8z"/></svg></button>
+  </span>
+</div></header>
+
+<div class="wrap">
+<div class="eyebrow"><span data-i18n="bm.eyebrow">Benchmark</span></div>
+<h1><span data-i18n="bm.h1">What is measured, what is only covered, what is missing</span></h1>
+<div class="warn" style="margin:0 0 26px"><b><span data-i18n="bm.warn">Table 1 measures correctness, table 2 measures only volume and stability. They must not be mixed.</span></b>
+<div><span data-i18n="bm.warn2">A number without a reference does not enter the first table.</span></div></div>
+
+<section>
+  <h2><span data-i18n="bm.t1">1. Measured — a reference or a direct measurement exists</span></h2>
+  <p class="sub"><span data-i18n="bm.t1sub">Every row rests on manual labelling, on the geometry of two vanishing points, or on a direct measurement over frames.</span></p>
+  <div class="card t1"><div class="tbl"><table>
+  <tr><th><span data-i18n="bm.th.q">Quantity</span></th><th><span data-i18n="bm.th.v">Value</span></th><th><span data-i18n="bm.th.s">Source</span></th><th><span data-i18n="bm.th.h">How it was obtained</span></th></tr>
+  <tr><td><b><span data-i18n="bm.r1.n">Body orientation MAE</span></b></td><td class='num'>21.2°</td><td><code>labels/s5_orient_50.jsonl</code></td><td><span data-i18n="bm.r1.c">95% bootstrap [15.5, 28.8], median 15.6, n=50 labelled by hand, gross errors &gt;90 deg 2%</span></td></tr><tr><td><b><span data-i18n="bm.r2.n">Camera height</span></b></td><td class='num'>4.39 m</td><td><code>calib/homography.json</code></td><td><span data-i18n="bm.r2.c">from two vanishing points, pole-polar relation</span></td></tr><tr><td><b><span data-i18n="bm.r3.n">Focal length</span></b></td><td class='num'>1030 px</td><td><code>calib/homography.json</code></td><td><span data-i18n="bm.r3.c">0.467 of the frame diagonal</span></td></tr><tr><td><b><span data-i18n="bm.r4.n">Median height of the sample</span></b></td><td class='num'>1.68 m</td><td><code>calib/homography.json</code></td><td><span data-i18n="bm.r4.c">SET as the source of scale, therefore NOT a check</span></td></tr><tr><td><b><span data-i18n="bm.r5.n">Implied L1↔L3 width</span></b></td><td class='num'>5.28 m</td><td><code>docs/DECISIONS.md</code></td><td><span data-i18n="bm.r5.c">against 6.06 m from satellite: a different cross-section, curb offset ~0.8 m</span></td></tr><tr><td><b><span data-i18n="bm.r6.n">Height drift with depth</span></b></td><td class='num'>-0.0188 m/m</td><td><code>calib/homography.json</code></td><td><span data-i18n="bm.r6.c">equivalent to a 4.9% grade; calling it a street gradient would be a guess</span></td></tr><tr><td><b><span data-i18n="bm.r7.n">Camera shift over a day</span></b></td><td class='num'>< 0.25 px</td><td><code>phase correlation, 3 files</code></td><td><span data-i18n="bm.r7.c">against clip_debug_2030JST.ts: the camera is fixed, so the calibration holds for another hour</span></td></tr><tr><td><b><span data-i18n="bm.r8.n">Box-height cutoff threshold</span></b></td><td class='num'>70 px</td><td><code>configs/s3_detect.yaml</code></td><td><span data-i18n="bm.r8.c">derived from the focal length: 1030 x 1.68 / 25 = 69.2</span></td></tr><tr><td><b><span data-i18n="bm.r9.n">Depth beyond which nobody remains</span></b></td><td class='num'>32.6 m</td><td><code>track/tracks.parquet</code></td><td><span data-i18n="bm.r9.c">after the 70 px threshold was applied in S3</span></td></tr></table></div></div>
+
+  <div class="card t1" style="margin-top:16px">
+    <div class="zname"><span data-i18n="bm.bins">Median box height by depth</span></div>
+    <p class="sub" style="margin:8px 0 12px"><span data-i18n="bm.binsub">A direct measurement over matched tracks. The cutoff threshold is derived from it.</span></p>
+    <div class="tbl"><table><tr><th><span data-i18n="bm.th.depth">Depth</span></th><th><span data-i18n="bm.th.rows">Rows</span></th><th><span data-i18n="bm.th.med">Median height</span></th></tr>
+    <tr><td>0&ndash;3 m</td><td class='num'>32084</td><td class='num'>240 px</td></tr><tr><td>3&ndash;6 m</td><td class='num'>64348</td><td class='num'>249 px</td></tr><tr><td>6&ndash;9 m</td><td class='num'>78708</td><td class='num'>209 px</td></tr><tr><td>9&ndash;12 m</td><td class='num'>74221</td><td class='num'>170 px</td></tr><tr><td>12&ndash;15 m</td><td class='num'>61477</td><td class='num'>138 px</td></tr><tr><td>15&ndash;18 m</td><td class='num'>53326</td><td class='num'>115 px</td></tr><tr><td>18&ndash;21 m</td><td class='num'>46292</td><td class='num'>99 px</td></tr><tr><td>21&ndash;24 m</td><td class='num'>36619</td><td class='num'>87 px</td></tr><tr><td>24&ndash;27 m</td><td class='num'>23257</td><td class='num'>78 px</td></tr><tr><td>27&ndash;30 m</td><td class='num'>6688</td><td class='num'>74 px</td></tr><tr><td>30&ndash;33 m</td><td class='num'>216</td><td class='num'>72 px</td></tr></table></div></div>
+</section>
+
+<section>
+  <h2><span data-i18n="bm.t2">2. Coverage and stability — measures volume, NOT correctness</span></h2>
+  <p class="sub"><span data-i18n="bm.t2sub">These numbers say how much data was collected and how consistent it is. A model agreeing with itself is not evidence that it is right.</span></p>
+  <div class="card t2"><div class="tbl"><table>
+  <tr><th><span data-i18n="bm.th.q">Quantity</span></th><th><span data-i18n="bm.th.v">Value</span></th><th><span data-i18n="bm.th.s">Source</span></th><th><span data-i18n="bm.th.m">What it means</span></th></tr>
+  <tr><td><b><span data-i18n="bm.r10.n">Frames processed</span></b></td><td class='num'>36000 / 108000</td><td><code>det/frames_index.parquet</code></td><td><span data-i18n="bm.r10.c">33% at frame_stride 3</span></td></tr><tr><td><b><span data-i18n="bm.r11.n">Tracks in total</span></b></td><td class='num'>3359</td><td><code>track/tracks.parquet</code></td><td><span data-i18n="bm.r11.c">after the box-height cutoff in S3</span></td></tr><tr><td><b><span data-i18n="bm.r12.n">Share of indirect foot points</span></b></td><td class='num'>100%</td><td><code>track/tracks.parquet</code></td><td><span data-i18n="bm.r12.c">taken from the bottom of the box, not from the ankles</span></td></tr><tr><td><b><span data-i18n="bm.r13.n">Body orientation coverage</span></b></td><td class='num'>71%</td><td><code>pose/orient.parquet</code></td><td><span data-i18n="bm.r13.c">share of tracks for which yaw was estimated at all</span></td></tr><tr><td><b><span data-i18n="bm.r14.n">Upper-garment class coverage</span></b></td><td class='num'>48%</td><td><code>attr/tracks_attr.parquet</code></td><td><span data-i18n="bm.r14.c">1620 of 3359 tracks</span></td></tr><tr><td><b><span data-i18n="bm.r15.n">Track length, median</span></b></td><td class='num'>121</td><td><code>track/tracks.parquet</code></td><td><span data-i18n="bm.r15.c">frames; p10 11, p90 285</span></td></tr><tr><td><b><span data-i18n="bm.r16.n">Yaw spread within a track, median</span></b></td><td class='num'>13&deg;</td><td><code>pose/orient.parquet</code></td><td><span data-i18n="bm.r16.c">interquartile range. Stability of the estimate, NOT its correctness</span></td></tr><tr><td><b><span data-i18n="bm.r17.n">Events flagged low_confidence</span></b></td><td class='num'>4167 / 10043 (41%)</td><td><code>attn/events.parquet</code></td><td><span data-i18n="bm.r17.c">grazing angle, or orientation not measured; excluded from the aggregate</span></td></tr><tr><td><b><span data-i18n="bm.r18.n">Frames at a grazing angle</span></b></td><td class='num'>3358</td><td><code>attn/track_zone_frames.parquet</code></td><td><span data-i18n="bm.r18.c">the facade is seen edge-on, the intersection is unreliable</span></td></tr><tr><td><b><span data-i18n="bm.r19.n">Turned toward M1</span></b></td><td class='num'>2.5%</td><td><code>out/metrics.json</code></td><td><span data-i18n="bm.r19.c">95% CI [1.9, 3.2], Wilson, resampled by track</span></td></tr><tr><td><b><span data-i18n="bm.r20.n">Turned toward M2</span></b></td><td class='num'>7.5%</td><td><code>out/metrics.json</code></td><td><span data-i18n="bm.r20.c">95% CI [6.6, 8.6], Wilson, resampled by track</span></td></tr><tr><td><b><span data-i18n="bm.r21.n">Turned toward M3</span></b></td><td class='num'>13.3%</td><td><code>out/metrics.json</code></td><td><span data-i18n="bm.r21.c">95% CI [12.1, 14.7], Wilson, resampled by track</span></td></tr><tr><td><b><span data-i18n="bm.r22.n">Turned toward M4</span></b></td><td class='num'>3.4%</td><td><code>out/metrics.json</code></td><td><span data-i18n="bm.r22.c">95% CI [2.8, 4.2], Wilson, resampled by track</span></td></tr></table></div></div>
+</section>
+
+<section>
+  <h2><span data-i18n="bm.t3">3. Not measured — and what it would take</span></h2>
+  <div class="card t3"><div class="tbl"><table>
+  <tr><th><span data-i18n="bm.th.miss">What is missing</span></th><th><span data-i18n="bm.th.need">What it would take</span></th></tr>
+  <tr><td><b>Recall детекции по глубине</b></td><td>Нужна ручная разметка ~200 боксов на разных глубинах. Отсечка по высоте рамки — это ПРОКСИ, а не recall.</td></tr><tr><td><b>MAE поворота головы</b></td><td>Размечен только корпус. Голова оценивается отдельной колонкой и не проверена ничем.</td></tr><tr><td><b>Точность класса верха</b></td><td>Нужна размеченная выборка 50+ кропов. Баланс белого применён, но его верность не подтверждена: коэффициенты считались из того же фона.</td></tr><tr><td><b>Независимая проверка масштаба</b></td><td>Нужен замер рулеткой известного отрезка в кадре. Сейчас масштаб задан ростом, а рост поэтому не является проверкой.</td></tr><tr><td><b>MAE на плотной сцене</b></td><td>Разметка снята на raw/peak_hour.ts, а метрики считаны по вечернему часу. В плотной сцене люди перекрывают друг друга сильнее, и MAE там может быть хуже.</td></tr><tr><td><b>Precision событий внимания</b></td><td>Нужна ручная проверка ~100 событий: действительно ли человек был повёрнут к витрине в засчитанный момент.</td></tr></table></div></div>
+</section>
+</div>
+<div id="lb"><img id="lbimg" alt=""><div class="meta" id="lbmeta"></div></div>
+<script>window.__I18N__ = {"nav.camera": {"en": "Camera", "ru": "Камера", "ja": "カメラ"}, "nav.location": {"en": "Location", "ru": "Локация", "ja": "所在地"}, "nav.window": {"en": "Window", "ru": "Окно", "ja": "対象時間"}, "nav.menu": {"en": "Menu", "ru": "Меню", "ja": "メニュー"}, "nav.dash": {"en": "Dashboard", "ru": "Дашборд", "ja": "ダッシュボード"}, "nav.colors": {"en": "Clothing", "ru": "Одежда", "ja": "服装"}, "nav.replay": {"en": "Replay", "ru": "Реплей", "ja": "リプレイ"}, "nav.overlay": {"en": "Overlay video", "ru": "Оверлей", "ja": "オーバーレイ"}, "nav.frames": {"en": "Screenshots", "ru": "Скриншоты", "ja": "スクリーンショット"}, "nav.bench": {"en": "Benchmark", "ru": "Бенчмарк", "ja": "ベンチマーク"}, "nav.report": {"en": "Provenance", "ru": "Провенанс", "ja": "来歴"}, "nav.theme": {"en": "Light / Dark", "ru": "Светлая / Тёмная", "ja": "ライト / ダーク"}, "hero.eyebrow": {"en": "Storefront attention", "ru": "Внимание к витринам", "ja": "店舗への注目"}, "hero.title": {"en": "What the camera actually measured", "ru": "Что камера действительно измерила", "ja": "カメラが実際に計測したもの"}, "hero.sub": {"en": "Every number on this page is read from out/metrics.json, written by stage S8, together with its confidence interval and coverage. Nothing here is estimated by eye. Attention means a turn of the body or head toward a storefront — it is not gaze, and it is not interest.", "ru": "Каждое число на этой странице прочитано из out/metrics.json, записанного этапом S8, вместе с доверительным интервалом и покрытием. Ничего здесь не оценено на глаз. Внимание — это поворот корпуса или головы в сторону витрины, а не взгляд и не интерес.", "ja": "本ページの数値はすべて、S8が出力した out/metrics.json から 信頼区間とカバレッジとともに読み込まれています。目視による 推定は一切ありません。「注目」とは店舗方向への体または頭の 向きであり、視線でも関心でもありません。"}, "kpi.tracked": {"en": "People tracked", "ru": "Треков людей", "ja": "追跡した人数"}, "kpi.turned": {"en": "Turned toward a storefront", "ru": "Повернулись к витрине", "ja": "店舗の方を向いた"}, "kpi.stopped": {"en": "Stopped near a storefront", "ru": "Остановились у витрины", "ja": "店舗前で立ち止まった"}, "kpi.garment": {"en": "Upper-garment class resolved", "ru": "Класс верха определён", "ja": "上衣クラス判定済み"}, "warn.head": {"en": "Read these three caveats before the percentages.", "ru": "Три оговорки, которые надо прочесть до процентов.", "ja": "割合を読む前に、以下の3点をお読みください。"}, "warn.scale": {"en": "Scale comes from pedestrian height, not from the street.", "ru": "Масштаб взят из роста пешеходов, а не из ширины улицы.", "ja": "スケールは歩行者の身長由来であり、street幅ではありません。"}, "warn.scale2": {"en": "The satellite reference (6.06 m) was rejected because it implies a 1.93 m median height. Height is therefore no longer an independent check; one independent check remains.", "ru": "Спутниковый эталон 6.06 м отвергнут: он даёт медианный рост 1.93 м. Поэтому рост больше не независимая проверка; осталась одна независимая проверка.", "ja": "衛星基準6.06mは中央身長1.93mを意味するため棄却しました。よって身長は独立検証ではなくなり、独立検証は1つ残ります。"}, "warn.low": {"en": "Attention rates are low by construction.", "ru": "Доли внимания низкие по построению.", "ja": "注目率は定義上低くなります。"}, "warn.low2": {"en": "A track counts only when the orientation ray actually crosses the facade segment, grazing angles excluded. This is a geometric test, not a guess about interest.", "ru": "Трек засчитывается, только если луч ориентации реально пересёк отрезок фасада; скользящие углы исключены. Это геометрический тест, а не догадка об интересе.", "ja": "方位レイが実際にファサード線分と交差した場合のみ計上し、斜入射は除外します。幾何的判定であり、関心の推測ではありません。"}, "warn.demo": {"en": "No demographics.", "ru": "Никакой демографии.", "ja": "属性推定なし。"}, "warn.demo2": {"en": "Gender, age and ethnicity are not estimated and will not be: privacy, and no ground truth to gate them against.", "ru": "Пол, возраст и этничность не определяются и определяться не будут: приватность и отсутствие разметки для гейта.", "ja": "性別・年齢・民族は推定せず、今後も行いません。プライバシーと、検証用の正解データがないためです。"}, "kpi.n.tracked": {"en": "frames processed", "ru": "кадров обработано", "ja": "処理フレーム"}, "kpi.n.turned": {"en": "of tracks · body/head turn, NOT gaze", "ru": "от треков · поворот корпуса или головы, НЕ взгляд", "ja": "の割合 · 体/頭の向きであり視線ではない"}, "kpi.n.stopped": {"en": "speed below threshold inside an apron polygon", "ru": "скорость ниже порога внутри прифасадной полосы", "ja": "店前帯内で速度が閾値未満"}, "kpi.n.garment": {"en": "of tracks · white balance applied, accuracy NOT validated", "ru": "от треков · баланс белого применён, точность НЕ валидирована", "ja": "の割合 · ホワイトバランス適用、精度は未検証"}, "cap.zone": {"en": "stratified by distance to the facade · faces anonymised before anything is written to disk", "ru": "стратифицировано по дистанции до фасада · лица обезличены до записи на диск", "ja": "ファサードまでの距離で層化 · 保存前に顔を匿名化"}, "cap.color": {"en": "stratified by agreement; class chosen by vote across up to 8 crops", "ru": "стратифицировано по согласию; класс выбран голосованием по 8 кропам", "ja": "一致度で層化。最大8クロップの多数決でクラスを決定"}, "cap.arch": {"en": "click any frame to open it full size", "ru": "клик по кадру открывает его крупно", "ja": "画像をクリックすると拡大表示"}, "cap.frames": {"en": "frames of", "ru": "кадров от", "ja": "枚 /"}, "cap.people": {"en": "people", "ru": "человек", "ja": "人"}, "cap.person": {"en": "person", "ru": "человека", "ja": "人"}, "sec.zones.eyebrow": {"en": "Per storefront", "ru": "По витринам", "ja": "店舗別"}, "sec.zones.title": {"en": "Attention by storefront", "ru": "Внимание по витринам", "ja": "店舗別の注目度"}, "sec.zones.sub": {"en": "The grid under each card shows the actual people the number counts. Click any frame to open it full size.", "ru": "Сетка под карточкой показывает тех самых людей, которых считает число. Клик по кадру открывает его крупно.", "ja": "各カードの下のグリッドは、その数値が数えた本人たちです。画像をクリックすると拡大표示されます。"}, "z.entered": {"en": "tracks entered the zone", "ru": "треков вошло в зону", "ja": "ゾーンに入った追跡数"}, "z.attn": {"en": "median attention time", "ru": "медианное время внимания", "ja": "注目時間の中央値"}, "z.dwell": {"en": "median time in zone", "ru": "медианное время в зоне", "ja": "ゾーン滞在時間の中央値"}, "z.counted": {"en": "tracks counted as turned", "ru": "треков засчитано повёрнутыми", "ja": "「向いた」と判定された追跡数"}, "z.turned": {"en": "turned toward it", "ru": "повернулись к ней", "ja": "この店舗を向いた"}, "z.empty": {"en": "Nobody was counted as turned toward this storefront, so there is nothing to show. An empty grid here is the correct picture, not a missing feature.", "ru": "К этой витрине никто не засчитан повёрнутым, показывать нечего. Пустая сетка здесь — верная картина, а не недоделка.", "ja": "この店舗を向いたと判定された人はいないため、表示するものが ありません。空のグリッドは正しい結果であり、欠陥ではありません。"}, "sec.fn.eyebrow": {"en": "Funnel", "ru": "Воронка", "ja": "ファネル"}, "sec.fn.title": {"en": "From passer-by to attention", "ru": "От прохожего до внимания", "ja": "通行人から注目まで"}, "sec.fn.sub": {"en": "Each step is a SUBSET of the one above it. The share is of the top step, not of the previous one.", "ru": "Каждая ступень — ПОДМНОЖЕСТВО предыдущей. Доля считается от верхней ступени, а не от предыдущей.", "ja": "各段は上段の部分集合です。割合は最上段に対する値です。"}, "fn.tracked": {"en": "People tracked", "ru": "Треков людей", "ja": "追跡した人数"}, "fn.entered": {"en": "Entered a storefront zone", "ru": "Вошли в зону витрины", "ja": "店舗ゾーンに入った"}, "fn.turned": {"en": "Turned toward a storefront", "ru": "Повернулись к витрине", "ja": "店舗の方を向いた"}, "fn.stopped": {"en": "Stopped there", "ru": "Остановились там", "ja": "そこで立ち止まった"}, "sec.dist.eyebrow": {"en": "Distribution", "ru": "Распределение", "ja": "分布"}, "sec.dist.title": {"en": "Where people went and how long they stayed", "ru": "Куда люди шли и сколько оставались", "ja": "人の流れと滞在時間"}, "dist.byzone": {"en": "Visitors by zone", "ru": "Посетители по зонам", "ja": "ゾーン別の来訪者"}, "unit.visits": {"en": "VISITS", "ru": "ВХОДЫ", "ja": "入場回数"}, "unit.tracks": {"en": "TRACKS", "ru": "ТРЕКИ", "ja": "追跡数"}, "dist.sum.a": {"en": "people made", "ru": "человек совершили", "ja": "人が"}, "dist.sum.b": {"en": "zone entries — on average", "ru": "входов в зоны — в среднем", "ja": "回ゾーンに入場 — 平均"}, "dist.sum.c": {"en": "zones per person: the street is a through route, people pass several storefronts.", "ru": "зоны на человека: улица сквозная, люди проходят мимо нескольких витрин.", "ja": "ゾーン/人。この通りは通り抜けであり、人は複数の店舗の前を 通過します。"}, "dist.dwell": {"en": "Time in zone", "ru": "Время в зоне", "ja": "ゾーン滞在時間"}, "dist.dwell.u": {"en": "number of ZONE VISITS in each bucket, not people: one person entering three zones counts three times", "ru": "число ПОСЕЩЕНИЙ ЗОН в каждой корзине, а не людей: один человек, зашедший в три зоны, считается трижды", "ja": "各区間の「ゾーン訪問回数」であり人数ではありません。3ゾーンに入った1人は3回として数えます"}, "dist.attn.u": {"en": "number of TRACKS in each bucket, one track counted once", "ru": "число ТРЕКОВ в каждой корзине, трек считается один раз", "ja": "各区間の追跡数。1追跡は1回のみ計上"}, "dist.byzone.u": {"en": "tracks that entered each zone; one track can enter several", "ru": "треков, вошедших в каждую зону; один трек может войти в несколько", "ja": "各ゾーンに入った追跡数。1追跡が複数ゾーンに入ることがあります"}, "dist.attn": {"en": "Attention time", "ru": "Время внимания", "ja": "注目時間"}, "sec.foot.eyebrow": {"en": "Footfall", "ru": "Поток", "ja": "人流"}, "sec.foot.title": {"en": "Presence over time", "ru": "Присутствие во времени", "ja": "時間帯別の在圏"}, "sec.foot.sub": {"en": "Mean simultaneous detections per 10-second bin, from the presence curve computed by S8.", "ru": "Среднее число одновременных детекций в 10-секундном интервале, из кривой присутствия этапа S8.", "ja": "10秒ビンごとの同時検出数の平均。S8の在圏カーブより。"}, "sec.cloth.eyebrow": {"en": "Clothing", "ru": "Одежда", "ja": "服装"}, "sec.cloth.title": {"en": "Upper-garment lightness", "ru": "Светлота верхней одежды", "ja": "上衣の明度"}, "cl.head": {"en": "Colour is corrected for the camera's cast, and NOT validated.", "ru": "Цвет скорректирован под сдвиг камеры и НЕ валидирован.", "ja": "色はカメラの色被りを補正済み、ただし未検証。"}, "cl.why": {"en": "The first run called 21 of 25 tracks «blue» — every one with hue 107–124, which is exactly the median hue of the whole frame (110). It was classifying the camera's colour cast, not clothing.", "ru": "Первый прогон назвал синими 21 трек из 25 — и все с тоном 107–124, ровно медианный тон всего кадра (110). Классифицировался цветовой сдвиг камеры, а не одежда.", "ja": "初回は25件中21件を「青」と判定し、いずれも色相107〜124 — これは全画面の中央色相110そのものです。衣服ではなくカメラの 色被りを分類していました。"}, "cl.gains": {"en": "Fixed by white balance on the road surface inside the ROI, not by raising a threshold. Channel gains B/G/R:", "ru": "Исправлено балансом белого по мостовой внутри ROI, а не поднятием порога. Коэффициенты каналов B/G/R:", "ja": "閾値を上げるのではなく、ROI内の路面でホワイトバランスを取って 補正。チャネル係数 B/G/R:"}, "cl.sat": {"en": "Road saturation before and after:", "ru": "Насыщенность мостовой до и после:", "ja": "路面の彩度、補正前と補正後:"}, "cl.sat2": {"en": "The drop proves the correction was APPLIED, not that it is CORRECT — the gains were computed from that same road. The only non-circular check is manual labelling.", "ru": "Падение доказывает, что коррекция ПРИМЕНИЛАСЬ, а не что она ВЕРНА: коэффициенты считались из этой же мостовой. Единственная некольцевая проверка — ручная разметка.", "ja": "この低下は補正が「適用された」証拠であり、「正しい」証拠では ありません。係数は同じ路面から算出されています。非循環的な検証は 手作業のラベル付けのみです。"}, "cl.chroma": {"en": "Tracks with real chroma, above the achromatic floor:", "ru": "Треков с реальной хромой, выше порога ахроматичности:", "ja": "無彩色しきい値を超える、実際に彩度のある追跡数:"}, "cl.notvalid": {"en": "Accuracy is NOT MEASURED.", "ru": "Точность НЕ ИЗМЕРЕНА.", "ja": "精度は未計測です。"}, "cl.notvalid2": {"en": "There are no labelled crops. top_color_conf is the share of crops that voted for the class times the share of agreeing pixels — not a probability of being right.", "ru": "Размеченных кропов нет. top_color_conf — это доля кадров за класс, умноженная на долю согласных пикселей, а не вероятность правильности.", "ja": "ラベル付きクロップがありません。top_color_conf はクラスに 投票したクロップの割合×一致画素の割合であり、正解確率では ありません。"}, "sec.geo.eyebrow": {"en": "Geometry", "ru": "Геометрия", "ja": "幾何"}, "sec.geo.title": {"en": "How this works, and how to check it", "ru": "Как это работает и как это проверить", "ja": "仕組みと検証方法"}, "sec.geo.sub": {"en": "The calibration check you can make with your own eyes: the street is straight, so trajectories on the ground plane must run straight and parallel along it.", "ru": "Проверка калибровки, которую можно сделать глазами: улица прямая, значит траектории на плане обязаны идти прямо и параллельно вдоль неё.", "ja": "目視でできる較正チェック：通りは直線なので、平面図上の 軌跡も直線かつ平行に並ぶはずです。"}, "sec.ev.eyebrow": {"en": "Evidence", "ru": "Доказательства", "ja": "根拠"}, "sec.ev.title": {"en": "Proof archive", "ru": "Архив пруфов", "ja": "証跡アーカイブ"}, "sec.ev.sub": {"en": "Every claim that carries frames, with the frames themselves. Selection is stratified, never top-N: a top-N grid would systematically flatter the number it illustrates. Faces are pixelated and blurred before anything reaches the disk.", "ru": "Каждое утверждение, за которым стоят кадры, вместе с самими кадрами. Отбор стратифицированный, а не top-N: сетка из лучших систематически льстила бы числу. Лица пикселизуются и размываются до записи на диск.", "ja": "画像を伴うすべての主張と、その画像そのもの。選択は層化 抽出であり上位N件ではありません。上位N件では数値を系統的に 良く見せてしまいます。顔は保存前にモザイクとぼかしを適用。"}, "arch.stage": {"en": "stage", "ru": "этап", "ja": "ステージ"}, "arch.frames": {"en": "frames in the index", "ru": "кадров в индексе", "ja": "枚（索引内）"}, "sec.hon.eyebrow": {"en": "Honesty", "ru": "Честность", "ja": "透明性"}, "sec.hon.title": {"en": "What is not measured", "ru": "Что не измерено", "ja": "未計測の項目"}, "sec.hon.title2": {"en": "Limitations", "ru": "Ограничения", "ja": "制約"}, "th.quantity": {"en": "Quantity", "ru": "Величина", "ja": "項目"}, "th.whynone": {"en": "Why it has no number", "ru": "Почему числа нет", "ja": "数値がない理由"}, "th.item": {"en": "Item", "ru": "Пункт", "ja": "項目"}, "th.what": {"en": "What is going on", "ru": "Что происходит", "ja": "内容"}, "th.conseq": {"en": "Consequence", "ru": "Следствие", "ja": "影響"}, "bm.eyebrow": {"en": "Benchmark", "ru": "Бенчмарк", "ja": "ベンチマーク"}, "bm.h1": {"en": "What is measured, what is only covered, what is missing", "ru": "Что измерено, что только покрыто, чего нет", "ja": "何が計測され、何が範囲だけで、何が欠けているか"}, "bm.warn": {"en": "Table 1 measures correctness, table 2 measures only volume and stability. They must not be mixed.", "ru": "Таблица 1 меряет правильность, таблица 2 — только объём и стабильность. Смешивать их нельзя.", "ja": "表1は正しさを、表2は量と安定性のみを測ります。混同は禁物です。"}, "bm.warn2": {"en": "A number without a reference does not enter the first table.", "ru": "Число без эталона в первую таблицу не попадает.", "ja": "基準のない数値は表1に入りません。"}, "bm.t1": {"en": "1. Measured — a reference or a direct measurement exists", "ru": "1. Измерено — есть эталон или прямой замер", "ja": "1. 計測済み — 基準または直接計測あり"}, "bm.t1sub": {"en": "Every row rests on manual labelling, on the geometry of two vanishing points, or on a direct measurement over frames.", "ru": "Каждая строка опирается на ручную разметку, на геометрию двух точек схода или на прямой замер по кадрам.", "ja": "各行は手動ラベル、2消失点の幾何、またはフレームの直接計測に 基づきます。"}, "bm.t2": {"en": "2. Coverage and stability — measures volume, NOT correctness", "ru": "2. Покрытие и стабильность — меряет объём, НЕ правильность", "ja": "2. カバレッジと安定性 — 量であり正しさではない"}, "bm.t2sub": {"en": "These numbers say how much data was collected and how consistent it is. A model agreeing with itself is not evidence that it is right.", "ru": "Эти числа говорят, сколько данных набрано и насколько они согласованы между собой. Согласованность модели с самой собой не является доказательством того, что она права.", "ja": "これらはデータ量と内的整合性を示します。モデルの自己整合性は 正しさの証明ではありません。"}, "bm.bins": {"en": "Median box height by depth", "ru": "Медианная высота рамки по глубине", "ja": "奥行き別の枠高中央値"}, "bm.binsub": {"en": "A direct measurement over matched tracks. The cutoff threshold is derived from it.", "ru": "Прямой замер по сопоставленным трекам. Отсюда выведен порог отсечки.", "ja": "対応付けた追跡の直接計測。ここから打ち切り閾値を導出。"}, "bm.th.q": {"en": "Quantity", "ru": "Величина", "ja": "項目"}, "bm.th.v": {"en": "Value", "ru": "Значение", "ja": "値"}, "bm.th.s": {"en": "Source", "ru": "Источник", "ja": "出典"}, "bm.th.h": {"en": "How it was obtained", "ru": "Как получено", "ja": "取得方法"}, "bm.th.m": {"en": "What it means", "ru": "Что это значит", "ja": "意味"}, "bm.th.depth": {"en": "Depth", "ru": "Глубина", "ja": "奥行き"}, "bm.th.rows": {"en": "Rows", "ru": "Строк", "ja": "行数"}, "bm.th.med": {"en": "Median height", "ru": "Медиана высоты", "ja": "高さ中央値"}, "bm.t3": {"en": "3. Not measured — and what it would take", "ru": "3. Не измерено — и что нужно, чтобы измерить", "ja": "3. 未計測 — 計測に必要なもの"}, "bm.th.miss": {"en": "What is missing", "ru": "Чего нет", "ja": "欠けているもの"}, "bm.th.need": {"en": "What it would take", "ru": "Что нужно", "ja": "必要なもの"}, "bm.r1.n": {"en": "Body orientation MAE", "ru": "MAE ориентации корпуса", "ja": "体の方位MAE"}, "bm.r1.c": {"en": "95% bootstrap [15.5, 28.8], median 15.6, n=50 labelled by hand, gross errors >90 deg 2%", "ru": "95% бутстрэп [15.5, 28.8], медиана 15.6, n=50 размечено вручную, грубых ошибок >90 град 2%", "ja": "95%ブートストラップ [15.5, 28.8]、中央値 15.6、手動ラベル n=50、90度超の粗大誤差 2%"}, "bm.r2.n": {"en": "Camera height", "ru": "Высота камеры", "ja": "カメラ高"}, "bm.r2.c": {"en": "from two vanishing points, pole-polar relation", "ru": "из двух точек схода, соотношение полюс-поляра", "ja": "2つの消失点、極・極線の関係より"}, "bm.r3.n": {"en": "Focal length", "ru": "Фокусное расстояние", "ja": "焦点距離"}, "bm.r3.c": {"en": "0.467 of the frame diagonal", "ru": "0.467 диагонали кадра", "ja": "画面対角の0.467倍"}, "bm.r4.n": {"en": "Median height of the sample", "ru": "Медианный рост выборки", "ja": "サンプルの身長中央値"}, "bm.r4.c": {"en": "SET as the source of scale, therefore NOT a check", "ru": "ЗАДАН как источник масштаба, поэтому НЕ является проверкой", "ja": "スケールの根拠として設定。したがって検証ではありません"}, "bm.r5.n": {"en": "Implied L1↔L3 width", "ru": "Подразумеваемая ширина L1↔L3", "ja": "含意されるL1↔L3幅"}, "bm.r5.c": {"en": "against 6.06 m from satellite: a different cross-section, curb offset ~0.8 m", "ru": "против спутниковых 6.06 м: иное сечение, отступ бордюра ~0.8 м", "ja": "衛星の6.06mに対して。断面が異なり、縁石オフセット約0.8m"}, "bm.r6.n": {"en": "Height drift with depth", "ru": "Дрейф роста по глубине", "ja": "奥行きに伴う身長ドリフト"}, "bm.r6.c": {"en": "equivalent to a 4.9% grade; calling it a street gradient would be a guess", "ru": "эквивалент уклона 4.9%; называть это уклоном улицы нельзя — не проверено", "ja": "勾配4.9%相当。通りの勾配と断定はできません"}, "bm.r7.n": {"en": "Camera shift over a day", "ru": "Сдвиг камеры за сутки", "ja": "1日でのカメラ移動"}, "bm.r7.c": {"en": "against clip_debug_2030JST.ts: the camera is fixed, so the calibration holds for another hour", "ru": "против clip_debug_2030JST.ts: камера неподвижна, калибровка действительна для другого часа", "ja": "clip_debug_2030JST.tsとの比較。カメラは固定で、別時間帯でも較正は有効"}, "bm.r8.n": {"en": "Box-height cutoff threshold", "ru": "Порог отсечки по высоте рамки", "ja": "枠高による打ち切り閾値"}, "bm.r8.c": {"en": "derived from the focal length: 1030 x 1.68 / 25 = 69.2", "ru": "выведен из фокуса: 1030 x 1.68 / 25 = 69.2", "ja": "焦点距離より算出：1030 x 1.68 / 25 = 69.2"}, "bm.r9.n": {"en": "Depth beyond which nobody remains", "ru": "Глубина, дальше которой людей нет", "ja": "人が残らない奥行き"}, "bm.r9.c": {"en": "after the 70 px threshold was applied in S3", "ru": "после применения порога 70 px в S3", "ja": "S3で70pxの閾値を適用した後"}, "bm.r10.n": {"en": "Frames processed", "ru": "Кадров обработано", "ja": "処理フレーム"}, "bm.r10.c": {"en": "33% at frame_stride 3", "ru": "33% при frame_stride 3", "ja": "frame_stride 3 で33%"}, "bm.r11.n": {"en": "Tracks in total", "ru": "Треков всего", "ja": "追跡総数"}, "bm.r11.c": {"en": "after the box-height cutoff in S3", "ru": "после отсечки по высоте рамки в S3", "ja": "S3の枠高打ち切り後"}, "bm.r12.n": {"en": "Share of indirect foot points", "ru": "Доля косвенных опорных точек", "ja": "間接的な足元点の割合"}, "bm.r12.c": {"en": "taken from the bottom of the box, not from the ankles", "ru": "опора взята от низа рамки, а не от голеностопа", "ja": "足首ではなく枠の下端から取得"}, "bm.r13.n": {"en": "Body orientation coverage", "ru": "Покрытие ориентации корпуса", "ja": "体の方位カバレッジ"}, "bm.r13.c": {"en": "share of tracks for which yaw was estimated at all", "ru": "доля треков, у которых yaw вообще оценён", "ja": "yawが推定できた追跡の割合"}, "bm.r14.n": {"en": "Upper-garment class coverage", "ru": "Покрытие класса верха", "ja": "上衣クラスのカバレッジ"}, "bm.r14.c": {"en": "1620 of 3359 tracks", "ru": "1620 треков из 3359", "ja": "3359件中1620件"}, "bm.r15.n": {"en": "Track length, median", "ru": "Длина трека, медиана", "ja": "追跡長の中央値"}, "bm.r15.c": {"en": "frames; p10 11, p90 285", "ru": "кадров; p10 11, p90 285", "ja": "フレーム。p10 11、p90 285"}, "bm.r16.n": {"en": "Yaw spread within a track, median", "ru": "Разброс yaw внутри трека, медиана", "ja": "追跡内yawのばらつき中央値"}, "bm.r16.c": {"en": "interquartile range. Stability of the estimate, NOT its correctness", "ru": "межквартильный размах. Стабильность оценки, НЕ правильность", "ja": "四分位範囲。推定の安定性であり正しさではありません"}, "bm.r17.n": {"en": "Events flagged low_confidence", "ru": "Событий помечено low_confidence", "ja": "low_confidenceの事象"}, "bm.r17.c": {"en": "grazing angle, or orientation not measured; excluded from the aggregate", "ru": "скользящий угол или ориентация не измерена; в агрегат не идут", "ja": "斜入射または方位未計測。集計から除外"}, "bm.r18.n": {"en": "Frames at a grazing angle", "ru": "Кадров со скользящим углом", "ja": "斜入射のフレーム"}, "bm.r18.c": {"en": "the facade is seen edge-on, the intersection is unreliable", "ru": "фасад виден с ребра, пересечение ненадёжно", "ja": "ファサードを真横から見ており交差の信頼性が低い"}, "bm.r19.n": {"en": "Turned toward M1", "ru": "Доля повёрнутых, M1", "ja": "M1を向いた割合"}, "bm.r19.c": {"en": "95% CI [1.9, 3.2], Wilson, resampled by track", "ru": "95% CI [1.9, 3.2] по Уилсону, пересэмплирование по трекам", "ja": "95%CI [1.9, 3.2]、Wilson、追跡単位でリサンプリング"}, "bm.r20.n": {"en": "Turned toward M2", "ru": "Доля повёрнутых, M2", "ja": "M2を向いた割合"}, "bm.r20.c": {"en": "95% CI [6.6, 8.6], Wilson, resampled by track", "ru": "95% CI [6.6, 8.6] по Уилсону, пересэмплирование по трекам", "ja": "95%CI [6.6, 8.6]、Wilson、追跡単位でリサンプリング"}, "bm.r21.n": {"en": "Turned toward M3", "ru": "Доля повёрнутых, M3", "ja": "M3を向いた割合"}, "bm.r21.c": {"en": "95% CI [12.1, 14.7], Wilson, resampled by track", "ru": "95% CI [12.1, 14.7] по Уилсону, пересэмплирование по трекам", "ja": "95%CI [12.1, 14.7]、Wilson、追跡単位でリサンプリング"}, "bm.r22.n": {"en": "Turned toward M4", "ru": "Доля повёрнутых, M4", "ja": "M4を向いた割合"}, "bm.r22.c": {"en": "95% CI [2.8, 4.2], Wilson, resampled by track", "ru": "95% CI [2.8, 4.2] по Уилсону, пересэмплирование по трекам", "ja": "95%CI [2.8, 4.2]、Wilson、追跡単位でリサンプリング"}};</script>
+<script>
+(function(){
+  var root=document.documentElement, KEY='looq-theme';
+  try{var s=localStorage.getItem(KEY); if(s) root.setAttribute('data-theme',s);}catch(e){}
+  document.getElementById('theme').onclick=function(){
+    var d=root.getAttribute('data-theme')==='dark';
+    root.setAttribute('data-theme', d?'light':'dark');
+    try{localStorage.setItem(KEY, d?'light':'dark');}catch(e){}
+  };
+  var I18N = window.__I18N__ || {};
+  function setLang(code){
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      var row = I18N[el.getAttribute('data-i18n')];
+      if (row && row[code]) el.textContent = row[code];
+    });
+    document.querySelectorAll('.lang').forEach(function(b){
+      b.classList.toggle('on', b.dataset.lang===code);
+    });
+    document.documentElement.lang = code;
+    var th = document.getElementById('theme');
+    var row = I18N['nav.theme'];
+    if (th && row && row[code]) { th.title = row[code];
+      th.setAttribute('aria-label', row[code]); th.dataset.label = row[code]; }
+    var bg=document.getElementById('burger'), mrow=I18N['nav.menu'];
+    if (bg && mrow && mrow[code]) { bg.title = mrow[code];
+      bg.setAttribute('aria-label', mrow[code]); }
+    try{localStorage.setItem('looq-lang', code);}catch(e){}
+  }
+  document.querySelectorAll('.lang').forEach(function(b){
+    b.onclick = function(){ setLang(b.dataset.lang); };
+  });
+  try{var L=localStorage.getItem('looq-lang'); if(L) setLang(L);}catch(e){}
+
+
+  var burger=document.getElementById('burger'), nav=document.querySelector('.navgrp');
+  if (burger && nav){
+    burger.onclick=function(e){
+      e.stopPropagation();
+      var open=nav.classList.toggle('open');
+      burger.setAttribute('aria-expanded', open?'true':'false');
+    };
+    // Клик по пункту закрывает меню: иначе после выбора языка панель
+    // остаётся раскрытой и закрывает собой саму страницу.
+    nav.addEventListener('click',function(e){
+      if (e.target.closest('a')) close();
+    });
+    document.addEventListener('click',function(e){
+      if (nav.classList.contains('open') && !nav.contains(e.target)
+          && e.target!==burger) close();
+    });
+    document.addEventListener('keydown',function(e){
+      if (e.key==='Escape') close();
+    });
+  }
+  function close(){
+    if (!nav) return;
+    nav.classList.remove('open');
+    if (burger) burger.setAttribute('aria-expanded','false');
+  }
+
+  var lb=document.getElementById('lb'), im=document.getElementById('lbimg'),
+      mt=document.getElementById('lbmeta');
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(t.tagName==='IMG'&&(t.classList.contains('fig')||t.closest('.sheet'))){
+      im.classList.remove('small');
+      im.src=t.currentSrc||t.src;
+      // Решаем ПОСЛЕ загрузки самой модалки: у ленивой миниатюры на момент
+      // клика naturalWidth ещё нулевой, и кадр 1920x1080 попадал в режим
+      // для крошечных кропов.
+      var decide=function(){ im.classList.toggle('small', im.naturalWidth < 400); };
+      if (im.complete && im.naturalWidth) decide(); else im.onload = decide;
+      // Настоящий размер кропа обязан быть виден: увеличенная в семь раз
+      // марка не должна выглядеть как снимок высокого разрешения.
+      var px = (t.naturalWidth&&t.naturalHeight)
+             ? t.naturalWidth+'×'+t.naturalHeight+' px · ' : '';
+      mt.textContent = px + (t.dataset.meta||t.alt||'');
+      lb.classList.add('on');
+    } else if(lb.classList.contains('on')){ lb.classList.remove('on'); }
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape') lb.classList.remove('on');
+  });
+})();
+</script></html>

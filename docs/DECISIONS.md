@@ -1195,3 +1195,53 @@ code defects is a ratio, not an accident.
 A mechanical re-read of the prose against the code is cheap and finds a lot. On the
 next project it belongs in the same row as the tests, rather than being done once
 before publication.
+
+## 12. What is published on GitHub Pages, and why not all of it
+
+### 12.1. Decision
+
+Three pages are published: `dashboard.html`, `benchmark.html`, `report.html`.
+The evidence-crop set is cut to **12 frames per storefront, 48 in all**, selected
+stratified by confidence — the same selection as locally.
+
+Not published: the full archive of evidence crops (394 crops), `overlay.mp4`, the
+replay page. The video goes to YouTube; the header button points there.
+
+### 12.2. Reasoning
+
+**Blurring a face does not make the data non-personal.** The top 30 % of the crop
+covers the head, but the crop still carries clothing, build, gait, companions, an
+exact time and an exact place. Together that is enough to recognise a person —
+especially for someone who was there. Anonymisation here lowers the risk, it does
+not remove it.
+
+**A public indexed URL changes the scale of the risk.** While the pages sat
+locally, one person saw a crop. On Pages it enters search results and lives in
+caches indefinitely. That is a different quantity, not the same one with a
+correction.
+
+**APPI.** The recording is made in Japan, and crops of passers-by on a Kabukicho
+street fall under the Japanese personal data protection act. Publishing 394 crops
+of real people to demonstrate a methodology is a risk out of proportion to the
+benefit: the methodology can be checked on 48 as well.
+
+**What the reader loses.** The ability to see every frame behind every number.
+That is a real loss for a page whose value is traceability, and it should be
+named rather than hidden: the full archive is available from a local run, and the
+README says so next to the link.
+
+### 12.3. How it is done
+
+`--public` on `make_dashboard.py` and `make_benchmark.py`. In that mode the
+archive and the colour grids are **not built** rather than hidden with styles: a
+block hidden by styles would still go into the markup and be readable in the page
+source.
+
+In public mode the header links only to published pages, and the video link goes
+to YouTube. The build **fails** if a link to an unpublished file is left in the
+finished page: the check costs one line, and a broken link on Pages is otherwise
+found only by a reader.
+
+Three files are exempted in `.gitignore` **by name**. Not the `out/` folder and
+not a `*.html` mask: the mask would have pulled in `replay.html` with its link to
+a local mp4.

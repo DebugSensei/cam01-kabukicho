@@ -9,7 +9,14 @@ Street-level attention analytics from a single fixed camera.
 
 ![Dashboard](docs/img/dashboard.webp)
 
-[Overlay video](https://youtu.be/3ZXDQcmrOUI) — the dashboard is not published yet; build it locally with `make visuals` after a run
+[Live dashboard][pages] · [Overlay video](https://youtu.be/3ZXDQcmrOUI)
+
+The published dashboard carries a reduced evidence set — twelve frames per storefront,
+forty-eight in all, stratified by confidence exactly as the full build is. **The complete
+archive of 394 crops is deliberately not published**: blurring a face does not make a crop
+non-personal, and a public indexed URL is a different order of exposure from a local file.
+The reasoning is in [`docs/DECISIONS.md`](docs/DECISIONS.md) §12. The full archive, the
+replay page and the overlay video are all available from a local run.
 
 <!-- The published dashboard address lives in exactly one place: the [pages]
      definition at the bottom of this file. Change it there and every link

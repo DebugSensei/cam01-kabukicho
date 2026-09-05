@@ -26,7 +26,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from make_dashboard import (CSS, JS, esc, header_html,  # noqa: E402
+from make_dashboard import (CSS, JS, esc, header_html, set_public_build,  # noqa: E402
                             i18n_payload, register_i18n, t)
 
 from looq.io import atomic_write_text, read_json  # noqa: E402
@@ -109,10 +109,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--public", action="store_true",
+                    help="публичная сборка: шапка ведёт только на "
+                         "опубликованные страницы, видео — на YouTube")
     ap.add_argument("--hide-unmeasured", action="store_true",
                     help="скрыть таблицу 3 на демонстрации. Раздел НЕ удаляется "
                          "из кода: он возвращается запуском без этого флага")
     args = ap.parse_args(argv)
+    set_public_build(args.public)
 
     # Регистрация ДО первого t(): f-строка с t("bm.t3") вычисляется в
     # момент сборки sec3, и если словарь пополнить после неё, страница
