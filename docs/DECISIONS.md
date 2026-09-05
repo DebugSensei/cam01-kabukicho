@@ -1200,12 +1200,22 @@ before publication.
 
 ### 12.1. Decision
 
-Three pages are published: `dashboard.html`, `benchmark.html`, `report.html`.
-The evidence-crop set is cut to **12 frames per storefront, 48 in all**, selected
-stratified by confidence — the same selection as locally.
+Two pages are published: `dashboard.html` and `benchmark.html`. The evidence-crop
+set is cut to **12 frames per storefront, 48 in all**, selected stratified by
+confidence — the same selection as locally.
 
-Not published: the full archive of evidence crops (394 crops), `overlay.mp4`, the
-replay page. The video goes to YouTube; the header button points there.
+Not published: `report.html`, the full archive of evidence crops (394 crops),
+`overlay.mp4`, the replay page. The video goes to YouTube; the header button points
+there.
+
+`report.html` was in the original decision and was taken out on a measurement. The
+page embeds four full-size JPEG figures, and the same check the overlay is held to —
+facial keypoints at `conf >= 0.5` whose 24x24 neighbourhood has a Laplacian variance
+above 13.4 — finds **five sharp facial keypoints on each of two of them**. Those
+figures are drawn before any anonymisation runs. Publishing the page would put
+unblurred faces on an indexed URL, which is exactly what 12.2 argues against; the
+decision cannot be exempt from its own reasoning. The page is still built by every
+run and is the internal engineering report.
 
 ### 12.2. Reasoning
 
@@ -1242,9 +1252,9 @@ to YouTube. The build **fails** if a link to an unpublished file is left in the
 finished page: the check costs one line, and a broken link on Pages is otherwise
 found only by a reader.
 
-Three files are exempted in `.gitignore` **by name**. Not the `out/` folder and
-not a `*.html` mask: the mask would have pulled in `replay.html` with its link to
-a local mp4.
+Files are exempted in `.gitignore` **by name**. Not the `out/` folder and not a
+`*.html` mask: the mask would have pulled in `replay.html` with its link to a local
+mp4, and `report.html` with the figures above.
 
 ## 13. Overlay anonymisation
 

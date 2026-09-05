@@ -5,7 +5,7 @@ Street-level attention analytics from a single fixed camera.
 ![Python 3.10](https://img.shields.io/badge/python-3.10-3776ab)
 ![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76b900)
 ![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![tests 103](https://img.shields.io/badge/tests-103-2ea44f)
+![tests 110](https://img.shields.io/badge/tests-110-2ea44f)
 
 ![Dashboard](docs/img/dashboard.webp)
 
@@ -174,11 +174,12 @@ gate pass — the reason for the failure goes in
 **No number is obtained by eye.** Everything in the report is computed by code from an
 artifact on disk, and the line that computes it can be pointed at.
 
-**Anything unmeasured is labelled unmeasured** — with one gap: the ROI boundary is
-not among the numbers printed into `out/metrics.json`, only attribute coverage and the
-share of
-indirect foot points, the ROI boundary — all printed explicitly. 40 % coverage with an
-honest figure beats 100 % with rubbish.
+**Anything unmeasured is labelled unmeasured.** Attribute coverage and the share of
+indirect foot points are printed into `out/metrics.json` next to the numbers they bound,
+and the report renders them. One gap: the ROI boundary is not among them. It is a 70 px
+box-height cutoff standing in for a recall-by-depth curve that was never computed, and it
+is named as a proxy only in [Not measured](#not-measured) — in this file, not in the
+artifact. 40 % coverage with an honest figure beats 100 % with rubbish.
 
 ---
 
@@ -420,6 +421,13 @@ compares them against disk; on the published artifact that check fails,
 correctly, because it predates the field. The published geometry is
 deliberately left as it is — see Limitations.
 
+**Speed from neighbouring frames was biased 5× high**, found on synthetic data with
+known ground truth. At 30 fps a pedestrian moves ~4 cm per frame while the projected
+jitter of the foot point is 10–20 cm; because speed is a magnitude, the noise does not
+cancel under averaging — it pushes the median up. On synthetic tracks with a true speed
+of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS slope over
+the whole burst.
+
 **Two audits after the code was finished, because the code was not the only thing
 that could be wrong.**
 
@@ -448,13 +456,6 @@ Every one of the twenty was fixed before publication. The finding rate says some
 uncomfortable and worth saying plainly: prose about a system drifts from the system
 faster than the system drifts from itself, and nothing but a mechanical re-read catches
 it.
-
-A fifth defect, found on synthetic data with known ground truth: **speed from neighbouring
-frames was biased 5× high.** At 30 fps a pedestrian moves ~4 cm per frame while the
-projected jitter of the foot point is 10–20 cm; because speed is a magnitude, the noise
-does not cancel under averaging — it pushes the median up. On synthetic tracks with a
-true speed of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS
-slope over the whole burst.
 
 ---
 
@@ -495,30 +496,25 @@ to walk through which function computed which number to reach it.
 ```bash
 pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
 pip install -r requirements.txt
-python -m pytest tests/ -o addopts="" -q     # 101 passed, 2 skipped on a fresh clone
+python -m pytest tests/ -o addopts="" -q     # 107 passed, 3 skipped on a fresh clone
 make serve                                    # http://localhost:8080, serves out/
 ```
 
-The two skipped tests check that every row of the evidence index points at a file that
-exists and is the anonymised one; they need a completed run and skip on a fresh clone.
+110 tests are collected; three of them need artifacts a fresh clone does not have and
+skip. Two check that every row of the evidence index points at a file that exists and is
+the anonymised one; the third measures anonymisation on a real frame and needs both model
+weights and the source recording.
 
 `out/` is empty on a fresh clone: the pages exist only after a run.
 
 `make serve` starts nginx in Docker over `out/`. Without Docker: `make serve-nodocker`
 runs a small server that implements HTTP Range, which the replay needs to seek the video.
 
-To reproduce a run you need the recordings, the model weights and a GPU. Two inputs no
-stage can regenerate ship with the repository, because the published numbers cannot be
-checked without them:
-
-- [`zones/zones.json`](zones/zones.json) — the four storefronts and the ROI, traced by
-  hand once on the reference frame. Twenty clicks in an OpenCV window
-  (`make zones` → `scripts/pick_zones.py`). For a different camera you trace your own;
-  S2 refuses to run without the file.
-- [`calib/homography.json`](calib/homography.json) — the geometry every metre rests on.
-  S1 writes it, but re-running S1 today produces a different one, so this file is the
-  only record of the geometry the published numbers were computed with. See the
-  reproducibility row in Limitations.
+To reproduce a run you need the recordings, the model weights and a GPU. The two inputs
+no stage can regenerate — `zones/zones.json` and `calib/homography.json` — ship with the
+repository; [Provenance](#provenance) says what they are and why they cannot be rebuilt.
+S2 refuses to run without the zones file; for a different camera you trace your own in an
+OpenCV window with `make zones` (`scripts/pick_zones.py`).
 
 S1's clicked seeds ship too, in [`configs/calib_hints.yaml`](configs/calib_hints.yaml).
 Everything else under `calib/`, `zones/`, `det/`, `track/`, `pose/`, `attn/`, `attr/`
