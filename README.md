@@ -599,9 +599,6 @@ excluded by `.gitignore`, and every published crop passes through
 `looq/evidence.py::blur_face_region` — pixelation followed by a Gaussian — before it
 reaches disk, enforced by a single write path and a test that asserts it.
 
-<!-- ONE place to set the published dashboard address. When GitHub Pages
-     exists, put the URL here and restore the link on line 12 to
-     [Live dashboard][pages] — those are the only two edits needed. The link
-     is currently absent rather than pointing at nothing, because a dead
-     anchor in the first screenful is worse than no anchor. -->
-[pages]: # "GitHub Pages address not set yet"
+<!-- The published dashboard address, in one place. Every [pages] link in
+     this file follows it. -->
+[pages]: https://debugsensei.github.io/cam01-kabukicho/

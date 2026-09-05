@@ -1328,6 +1328,16 @@ def main(argv=None) -> int:
     # страница реплея с синхронным планом — вставлять туда ещё и ролик с
     # YouTube значило бы предлагать худшую копию того, что уже есть.
     # nocookie-домен: обычный youtube.com ставит трекеры до нажатия play.
+    # Заголовок без содержимого читается как недоделка, а не как решение.
+    # В публичной сборке архива нет по замыслу (DECISIONS 12), и секция не
+    # рендерится целиком, а не остаётся пустой рамкой.
+    archive_section = "" if not archive else f"""<section>
+  <div class="eyebrow">{t("sec.ev.eyebrow")}</div>
+  <h2>{t("sec.ev.title")}</h2>
+  <p class="sub">{t("sec.ev.sub")}</p>
+  <div class="grid">{''.join(archive)}</div>
+</section>"""
+
     video_section = "" if not args.public else f"""<section>
   <div class="eyebrow">{t("sec.vid.eyebrow")}</div>
   <h2>{t("sec.vid.title")}</h2>
@@ -1563,12 +1573,7 @@ ground edge; the id of the person is printed next to it">
   </div>
 </section>
 
-<section>
-  <div class="eyebrow">{t("sec.ev.eyebrow")}</div>
-  <h2>{t("sec.ev.title")}</h2>
-  <p class="sub">{t("sec.ev.sub")}</p>
-  <div class="grid">{''.join(archive)}</div>
-</section>
+{archive_section}
 
 <section>
   <div class="eyebrow">{t("sec.hon.eyebrow")}</div>
