@@ -13,7 +13,7 @@
 PY ?= python
 
 .PHONY: all ingest calib zones detect track orient attn attrs aggregate report \
-        verify run-all chain test hints ground pick-hour overlay overlay-plan figures hue-floor replay dashboard benchmark frames visuals serve serve-stop serve-nodocker depth-cutoff labels-orient labels-color rebuild-visuals rebuild-video zones-stage blur-check density-curve clean-artifacts help
+        verify run-all chain test hints ground pick-hour overlay overlay-plan figures readme-figures hue-floor replay dashboard benchmark frames visuals serve serve-stop serve-nodocker depth-cutoff labels-orient labels-color rebuild-visuals rebuild-video zones-stage blur-check density-curve clean-artifacts help
 
 all: report
 
@@ -131,6 +131,14 @@ overlay-plan:
 # с зонами, пример попадания луча.
 figures:
 	$(PY) scripts/make_figures.py
+
+# Картинки для README из артефактов, СРАЗУ обезличенные. Две цели в одной
+# намеренно: фигура с уличной сценой не должна иметь возможности попасть
+# в репозиторий необезличенной, а отдельная цель это позволяла бы забыть.
+readme-figures:
+	$(PY) scripts/make_readme_figures.py
+	$(PY) scripts/anonymise_figures.py --all
+
 
 # Замер: с какой насыщенности тон перестаёт повторять тон сцены. Отсюда берётся
 # s_achromatic_max в configs/s7_attrs.yaml.

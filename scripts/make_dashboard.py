@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.evidence import EvidenceSampler, EvidenceWriter  # noqa: E402
 from looq.io import atomic_write_text, load_config, read_json, require  # noqa: E402
+from looq.evidence import EvidenceError, blur_face_region  # noqa: E402
 from looq.pilot import iter_frames  # noqa: E402
 
 OUT = Path("out/dashboard.html")
@@ -845,12 +846,34 @@ def esc(x) -> str:
     return html.escape("" if x is None else str(x))
 
 
-def b64_img(path: Path, max_w: int | None = None, quality: int = 92) -> str | None:
+def b64_img(path: Path, max_w: int | None = None, quality: int = 92,
+            anonymise: bool = False) -> str | None:
     """Картинка в data-URI. Пруфы вшиваются ПО ОДНОМУ, а не монтажом: монтаж
-    ужимает кропы, и мелкий человек превращается в кашу."""
+    ужимает кропы, и мелкий человек превращается в кашу.
+
+    anonymise=True — прогнать кроп через обезличивание ЕЩЁ РАЗ, по текущему
+    порогу из configs/evidence.yaml. Кропы на диске писались разными прогонами
+    и несут разные пороги: часть сделана при 0.22, который владелец потом
+    поднял до 0.30. Страница обязана показывать текущий порог независимо от
+    того, когда кроп записан, а повторное размытие уже размытого безвредно.
+    """
     img = cv2.imread(str(path))
     if img is None:
         return None
+    if anonymise:
+        priv = load_config("configs/evidence.yaml").get("privacy") or {}
+        try:
+            img, _ = blur_face_region(
+                img,
+                top_frac=float(priv["face_blur_top_frac"]),
+                kernel_frac=float(priv["blur_kernel_frac"]),
+                sigma_frac=float(priv["blur_sigma_frac"]),
+                pixelate_factor=int(priv["pixelate_factor"]))
+        except (KeyError, EvidenceError):
+            # KeyError — конфиг без ключей приватности, это ошибка настройки.
+            # EvidenceError — область уже однородна, размывать нечего.
+            # Кроп на диске в любом случае уже обезличен своей стадией.
+            pass
     if max_w and img.shape[1] > max_w:
         s = max_w / img.shape[1]
         img = cv2.resize(img, (max_w, int(img.shape[0] * s)), interpolation=cv2.INTER_AREA)
@@ -880,7 +903,7 @@ def sheet_html(rows, note: str) -> str:
     ошибка, из-за которой сетку у M2 приняли за 12 посетителей."""
     cells = []
     for r in rows:
-        uri = b64_img(Path(r["path"]))
+        uri = b64_img(Path(r["path"]), anonymise=True)
         if uri is None:
             continue
         try:

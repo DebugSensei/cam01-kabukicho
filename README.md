@@ -305,10 +305,14 @@ other way, to **514** — see below.
 
 ## How errors were found
 
-Nine defects caught by measurement, not by looking. Four came from building the
-pipeline; three from a review that read every claim back against the artifacts; one
-from a dry run that re-computed a stage into a scratch file and diffed it against the
-artifact in use; one from synthetic data with known ground truth.
+Nine defects in the code, caught by measurement rather than by looking: four from
+building the pipeline, three from a review that read every claim back against the
+artifacts, one from a dry run that re-computed a stage into a scratch file and diffed it
+against the artifact in use, one from synthetic data with known ground truth.
+
+Then twenty more in the prose — the commit messages and this file — found the same way,
+by re-reading them against the code. Those are described at the end of this section,
+because they were the most numerous and the least expected.
 
 **Units in the zone projection** (guards: `looq/stages/s6_attn.py:91,168`). `calib/homography.json` holds two matrices:
 `H` in metres and `H_px_to_unit` in camera-height units. S2 projected zones with the
@@ -398,7 +402,36 @@ compares them against disk; on the published artifact that check fails,
 correctly, because it predates the field. The published geometry is
 deliberately left as it is — see Limitations.
 
-A fifth, found on synthetic data with known ground truth: **speed from neighbouring
+**Two audits after the code was finished, because the code was not the only thing
+that could be wrong.**
+
+The first read the twelve commit messages back against the repository they describe.
+Five claims did not hold: the ingest commit described recording and gap checking that
+`looq/stages/s0_ingest.py` does not implement (28 lines, status `not_implemented`); the
+scaffold commit stated face anonymisation as an accomplished fact while 173 of 257 crops
+carried a blur fraction the owner had rejected; the calibration commit claimed two
+independent cross-checks where the artifact records one and says so itself; the zones
+commit claimed the ROI drops tracks upstream, which no stage does; and the scaffold
+commit claimed every artifact has a schema in `docs/CONTRACTS.md` while
+`attn/track_zone_frames.parquet`, read by four consumers, had none. Four messages were
+rewritten and the missing contract was written.
+
+The second read every capability sentence in this README against the code that must
+implement it. **Fifteen** did not hold. Two are worth naming. "Every stage has a gate"
+was false: **two of the ten gates compute a metric**, the other eight name the metric
+they cannot compute and return 1 — honest in the terminal, not honest here. And "zone
+entry: tracks whose ground position enters a storefront's apron polygon" described a
+metric that does not exist: `visitors_*` counts tracks that came within 8 m of the
+facade, and the two quantities **differ by a factor of thirty**. The rest were of the
+same kind — a manual step described as automatic, a stale test count, a claim of no face
+imagery while two street frames sat in `docs/img`.
+
+Every one of the twenty was fixed before publication. The finding rate says something
+uncomfortable and worth saying plainly: prose about a system drifts from the system
+faster than the system drifts from itself, and nothing but a mechanical re-read catches
+it.
+
+A fifth defect, found on synthetic data with known ground truth: **speed from neighbouring
 frames was biased 5× high.** At 30 fps a pedestrian moves ~4 cm per frame while the
 projected jitter of the foot point is 10–20 cm; because speed is a magnitude, the noise
 does not cancel under averaging — it pushes the median up. On synthetic tracks with a
@@ -424,10 +457,22 @@ exists and is the anonymised one; they need a completed run and skip on a fresh 
 `make serve` starts nginx in Docker over `out/`. Without Docker: `make serve-nodocker`
 runs a small server that implements HTTP Range, which the replay needs to seek the video.
 
-To reproduce a run you need the recordings, the model weights, a GPU — and one manual
-step. The storefront outlines are traced by hand: `make zones` opens an OpenCV window
-for a twenty-click tracing that writes `zones/zones.json`, which is **not** in the
-repository, and S2 refuses to run without it. S1's clicked seeds, by contrast, do ship.
+To reproduce a run you need the recordings, the model weights and a GPU. Two inputs no
+stage can regenerate ship with the repository, because the published numbers cannot be
+checked without them:
+
+- [`zones/zones.json`](zones/zones.json) — the four storefronts and the ROI, traced by
+  hand once on the reference frame. Twenty clicks in an OpenCV window
+  (`make zones` → `scripts/pick_zones.py`). For a different camera you trace your own;
+  S2 refuses to run without the file.
+- [`calib/homography.json`](calib/homography.json) — the geometry every metre rests on.
+  S1 writes it, but re-running S1 today produces a different one, so this file is the
+  only record of the geometry the published numbers were computed with. See the
+  reproducibility row in Limitations.
+
+S1's clicked seeds ship too, in [`configs/calib_hints.yaml`](configs/calib_hints.yaml).
+Everything else under `calib/`, `zones/`, `det/`, `track/`, `pose/`, `attn/`, `attr/`
+and `out/` is stage output and is regenerated by a run.
 
 Full command sequence in the [`Makefile`](Makefile). `make run-all` covers S1-S6 and
 S8-S9: S0 is not implemented and S7 (garment colour) runs separately as `make attrs`.
