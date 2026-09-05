@@ -112,8 +112,16 @@ def _panel(mode: str, i: int, total: int, extra: list[str]) -> np.ndarray:
                   "0 pink    o other (motley)", "",
                   "u unsure    x not a person", ""]
     else:
-        lines += ["CLICK on the GROUND where", "the person is FACING.",
-                  "Left click = set direction.", "",
+        # Про Enter обязательно писать: клик только ставит точку, запись
+        # происходит по Enter/пробелу, и без подсказки это выглядит так,
+        # будто окно не реагирует на клик.
+        # Про корпус — тоже: модель считает угол по плечам, и разметка по
+        # направлению движения меряла бы другую величину.
+        lines += ["Label the TORSO, where the",
+                  "CHEST points. NOT where the",
+                  "person is walking.", "",
+                  "CLICK the GROUND in front", "of the chest, then",
+                  "ENTER or SPACE to confirm.", "",
                   "u unsure    x not a person", ""]
     lines += ["BACKSPACE  go back",
               "s          save and quit",
@@ -198,8 +206,17 @@ def main(argv=None) -> int:
     foot = tracks.set_index(["frame_idx", "track_id"])[["foot_x_px", "foot_y_px"]]
     det_by = {int(f): g for f, g in det.groupby("frame_idx")}
     items = []
+    last = int(max(want)) if len(want) else 0
     print(f"читаю {len(want)} кадров из {video} ...")
-    for fi, frame in iter_frames(video, want):
+    print(f"нужные кадры разбросаны до {last}, идём подряд без перемотки "
+          f"(у .ts из HLS она врёт) — это займёт время")
+
+    def _progress(i, left):
+        pct = 100.0 * i / last if last else 100.0
+        print(f"\r  {i}/{last} кадров ({pct:.0f}%), осталось найти {left}   ",
+              end="", flush=True)
+
+    for fi, frame in iter_frames(video, want, progress=_progress):
         rows = picks[picks["frame_idx"] == int(fi)]
         d = det_by.get(int(fi))
         if d is None:
@@ -268,6 +285,16 @@ def main(argv=None) -> int:
             mid_img[:ctx_s.shape[0], :] = ctx_s
             ox, oy = it["ctx_origin"]
             fpx = (int((it["foot_px"][0] - ox) * cs), int((it["foot_px"][1] - oy) * cs))
+            # Рамка цели: в плотной сцене одной точки у ног мало, чтобы понять,
+            # чью ориентацию размечаем, а ошибка здесь портит эталон молча.
+            bx1, by1, bx2, by2 = it["bbox_px"]
+            cv2.rectangle(mid_img,
+                          (int((bx1 - ox) * cs), int((by1 - oy) * cs)),
+                          (int((bx2 - ox) * cs), int((by2 - oy) * cs)),
+                          (60, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(mid_img, "THIS ONE",
+                        (int((bx1 - ox) * cs), max(14, int((by1 - oy) * cs) - 6)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 255, 255), 1, cv2.LINE_AA)
             cv2.circle(mid_img, fpx, 6, (60, 255, 255), -1, cv2.LINE_AA)
             if click["pt"] is not None:
                 cv2.arrowedLine(mid_img, fpx, click["pt"], (60, 255, 255), 2,

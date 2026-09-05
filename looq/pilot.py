@@ -107,11 +107,20 @@ def sample_burst_indices(n_frames: int, n_bursts: int,
     return indices[order], burst_id[order]
 
 
-def iter_frames(video_path: str | Path, indices: np.ndarray) -> Iterator[tuple[int, np.ndarray]]:
+def iter_frames(video_path: str | Path, indices: np.ndarray,
+                progress=None) -> Iterator[tuple[int, np.ndarray]]:
     """Последовательное чтение с отдачей только нужных кадров.
 
     Не перемотка: у .ts из HLS-сегментов CAP_PROP_POS_FRAMES врёт на границах
-    сегментов, и номера кадров разошлись бы с реальными.
+    сегментов, и номера кадров разошлись бы с реальными. Поэтому идём подряд.
+
+    Ненужные кадры берутся grab() — он демультиплексирует, но НЕ декодирует.
+    Декодирование остаётся только для запрошенных. На часовом .ts, где нужные
+    кадры разбросаны до 108 000-го, это разница между «читаем весь час
+    полностью» и «пробегаем его».
+
+    progress — необязательный вызываемый объект progress(idx, n_left). Без него
+    длинный проход выглядит как зависание: за минуты не печатается ничего.
     """
     path = Path(video_path)
     if not path.is_file():
@@ -123,12 +132,16 @@ def iter_frames(video_path: str | Path, indices: np.ndarray) -> Iterator[tuple[i
     idx = 0
     try:
         while wanted:
-            ok, frame = cap.read()
-            if not ok:
+            if not cap.grab():
                 break
             if idx in wanted:
+                ok, frame = cap.retrieve()
+                if not ok:
+                    break
                 wanted.discard(idx)
                 yield idx, frame
+            if progress is not None and idx % 2000 == 0:
+                progress(idx, len(wanted))
             idx += 1
     finally:
         cap.release()
