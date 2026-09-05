@@ -4,7 +4,7 @@
 
 СТАТУС: НЕ РЕАЛИЗОВАН. Возвращает 1.
 Правило 3: этап не считается сделанным, пока гейт не вернул 0. Порог не подкручивать —
-сначала объяснить причину провала в docs/JOURNAL.md.
+сначала объяснить причину провала в docs/DECISIONS.md.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq import STATUS_SKELETON                       # noqa: E402
-from looq.stages._base import read_artifact_status     # noqa: E402
+from looq.stages._base import (check_inputs_sha,       # noqa: E402
+                               read_artifact_status)
 
 STAGE = "s6_attn"
 ARTIFACT = "attn/events.parquet"
@@ -39,13 +40,24 @@ def main(argv=None) -> int:
         # Правило 8: пустой артефакт каркаса не может пройти гейт ни при каких порогах.
         print(f"[S6] артефакт {ARTIFACT} помечен status={STATUS_SKELETON} — данных нет")
 
+    # Единственная настоящая проверка этого гейта: входы артефакта обязаны
+    # совпадать с тем, что лежит на диске сейчас. Иначе после перекалибровки
+    # метры остаются от старой гомографии, а числа выглядят нормальными —
+    # молчаливая порча хуже падения (правило 8).
+    ok_sha, sha_problems = check_inputs_sha(ARTIFACT)
+    print(f"[S6] sha входных артефактов: {'ok' if ok_sha else 'ПРОВАЛ'}")
+    for q in sha_problems:
+        print(f"[S6]      {q}")
+
     print(f"[S6] НЕ РЕАЛИЗОВАН: метрика гейта не считается, результат не подтверждён")
     if args.allow_unmeasured:
         # Флаг понижает НЕИЗМЕРЕННОЕ до предупреждения. Провал реального порога
         # он не прощает и не может: это разные вещи, и смешать их значило бы
         # получить зелёный гейт на плохих числах.
         print(f"[S6] --allow-unmeasured: метрика не измерена, гейт пропущен")
-        return 0
+        # Флаг прощает НЕИЗМЕРЕННОЕ, но не рассогласование входов:
+        # это не «не посчитали», это «посчитали не по тем данным».
+        return 0 if ok_sha else 1
     return 1
 
 

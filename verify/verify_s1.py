@@ -15,7 +15,7 @@
 Независимы, ни одна не участвует в подгонке масштаба:
   * РАЗБРОС роста (IQR, p90-p10) — задаётся геометрией, а не масштабом;
   * ДРЕЙФ роста по глубине — регрессия est_height_m ~ foot_y_m, добавлена
-    по предложению исполнителя (см. docs/JOURNAL.md);
+    по предложению исполнителя (см. docs/DECISIONS.md);
   * медианная скорость пешеходов;
   * ширина улицы по спутниковому снимку.
 
@@ -28,7 +28,7 @@
 Пока хоть одна не реализована, гейт возвращает 1.
 
 Правило 3: этап не считается сделанным, пока гейт не вернул 0. Порог не подкручивать —
-сначала объяснить причину провала в docs/JOURNAL.md.
+сначала объяснить причину провала в docs/DECISIONS.md.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ import argparse                                                       # noqa: E4
 from looq import STATUS_SKELETON                                        # noqa: E402
 from looq.calib import height_depth_slope                               # noqa: E402
 from looq.geometry import facade_lines_separation_m, height_spread_stats  # noqa: E402
-from looq.io import load_config, read_json                             # noqa: E402
+from looq.io import load_config, read_json                             # noqa: E402, sha256_file
 from looq.stages._base import read_artifact_status                     # noqa: E402
 
 STAGE = "s1_calib"
@@ -114,7 +114,7 @@ def check_speed_median(homography: dict, gates: dict, min_n: int) -> Result:
 
 # --------------------------------------------------------------------------- #
 # 2c. Дрейф роста по глубине — независима.
-# Проверка добавлена по предложению исполнителя, см. docs/JOURNAL.md.
+# Проверка добавлена по предложению исполнителя, см. docs/DECISIONS.md.
 # --------------------------------------------------------------------------- #
 
 def check_depth_slope(homography: dict, gates: dict, min_n: int) -> Result:
@@ -134,6 +134,19 @@ def check_depth_slope(homography: dict, gates: dict, min_n: int) -> Result:
                "covers_zero": float(ci[0]) <= 0.0 <= float(ci[1]), "n": len(heights)}
     msg = (f"наклон {reg['slope_m_per_m']:+.5f} м/м, "
            f"CI95 [{reg['ci95_low']:+.5f}, {reg['ci95_high']:+.5f}]")
+
+    # Пересчёт и хранимое поле обязаны совпадать. Раньше гейт молча предпочитал
+    # пересчёт, и артефакт мог хранить любое другое число: так и вышло — этап
+    # домножал наклон на scale_rescale_factor, хотя м/м к масштабу инвариантен.
+    stored = homography.get("height_depth_slope")
+    if stored is not None:
+        got, want = float(stored), float(reg["slope_m_per_m"])
+        if abs(got - want) > max(1e-4, 0.02 * abs(want)):
+            return False, (
+                f"{msg} — но в артефакте лежит {got:+.5f}: пересчёт по "
+                f"pilot_heights_m/pilot_depths_m расходится с полем "
+                f"height_depth_slope в {got / want if want else float('nan'):.4f} "
+                f"раза. Этап писал не то, что считается по его же массивам")
     if not reg["covers_zero"]:
         return False, (f"{msg} — ноль НЕ накрыт: рост систематически плывёт с глубиной, "
                        f"гомография врёт. Именно этот дефект пуловый IQR прячет")
@@ -215,6 +228,35 @@ def check_street_width(homography: dict, cfg: dict) -> Result:
 
 # --------------------------------------------------------------------------- #
 
+def check_inputs_sha(homography: dict) -> Result:
+    """По каким входам посчитана калибровка и те ли они сейчас.
+
+    S3 перезаписывает det/frames.parquet на каждом прогоне нового материала.
+    Гомография, снятая по прежним детекциям, внешне неотличима от снятой по
+    нынешним, а геометрия у них разная — и от неё зависят ВСЕ метры проекта.
+    Замер: артефакт записан по клипу clip_debug_2030JST с 10150 людьми, а в
+    det/frames.parquet сейчас лежит час пик; повторный прогон S1 даёт фокус
+    947 px вместо 1030 и высоту камеры 4.26 м вместо 4.39.
+    """
+    rec = homography.get("inputs_sha256")
+    if not isinstance(rec, dict) or not rec:
+        return False, ("sha входов не записан — калибровка невоспроизводима: "
+                       "нечем проверить, по тем ли детекциям она снята")
+    bad = []
+    for src, want in sorted(rec.items()):
+        got = sha256_file(src)
+        if got is None:
+            bad.append(f"{src}: файла больше нет на диске")
+        elif want is None:
+            bad.append(f"{src}: sha не был записан")
+        elif got != want:
+            bad.append(f"{src}: изменился после калибровки "
+                       f"({want[:12]}... -> {got[:12]}...)")
+    if bad:
+        return False, "; ".join(bad)
+    return True, f"входов сверено: {len(rec)}"
+
+
 def check_ground_plane(homography: dict) -> Result:
     """Что можно проверить без масштаба: гомография и горизонт осмысленны."""
     problems: list[str] = []
@@ -274,7 +316,7 @@ def main(argv=None) -> int:
                      "6. невязка удержанных отрезков"):
             print(f"[S1] {name}: пропущена, нет откалиброванной гомографии")
             failed += 1
-        print(f"[S1] провалено проверок: {failed} из 8")
+        print(f"[S1] провалено проверок: {failed} из 9")
         return 1
 
     cfg = load_config(CONFIG)
@@ -319,6 +361,7 @@ def main(argv=None) -> int:
         ("4. ширина улицы [независима]", lambda: check_street_width(homography, cfg)),
         ("5. размер выборки", lambda: check_sample_size(homography, gates)),
         ("6. невязка удержанных отрезков", lambda: check_vp_holdout(homography, gates)),
+        ("7. входы калибровки [провенанс]", lambda: check_inputs_sha(homography)),
     ]
 
     for name, fn in checks:
@@ -330,7 +373,7 @@ def main(argv=None) -> int:
         if not ok:
             failed += 1
 
-    print(f"[S1] провалено проверок: {failed} из 8")
+    print(f"[S1] провалено проверок: {failed} из 9")
     return 0 if failed == 0 else 1
 
 

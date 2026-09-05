@@ -36,6 +36,7 @@ import numpy as np
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.color import (apply_wb, collect_road_pixels, hue_hist, road_mask,
                          sat_median, wb_gains_from_grey)
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require
 from looq.pilot import iter_frames
 from looq.stages._base import (
@@ -48,6 +49,7 @@ from looq.stages._base import (
 )
 
 STAGE = "s7_attrs"
+INPUTS = ["track/tracks.parquet", "det/frames.parquet"]
 OUTPUT = "attr/tracks_attr.parquet"
 
 OUTPUT_COLS: list[Col] = [
@@ -357,14 +359,15 @@ def main(argv=None) -> int:
         manifest.start()
         sampler = build_evidence(cfg, STAGE, manifest)
         res = run(cfg, manifest, sampler)
-        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK)
+        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK,
+                      inputs=INPUTS)
         index = finalize_evidence(sampler, manifest)
         manifest.note("output_artifact", OUTPUT)
         manifest.note("elapsed_s", round(time.time() - _t0, 1))
         manifest.finish(STATUS_OK)
         print(f"[{STAGE}] записано: {OUTPUT} ({len(res['rows'])} строк), пруфы {index}")
         return 0
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

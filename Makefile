@@ -202,7 +202,7 @@ dashboard:
 	$(PY) scripts/make_dashboard.py
 
 # Контроль обезличивания глазами. Требует уже собранных пруфов (S3 и далее).
-# Блокер в docs/JOURNAL.md снимается только после подтверждения владельцем.
+# Блокер в docs/DECISIONS.md снимается только после подтверждения владельцем.
 blur-check:
 	$(PY) scripts/check_blur.py --n 20
 

@@ -40,7 +40,9 @@ from looq.calib import (
     vp_candidates_on_line,
 )
 from looq.geometry import ORIENTATION_DISCLAIMER, facade_lines_separation_m, height_spread_stats
-from looq.io import ConfigError, RunManifest, load_config, read_json, require, write_json
+from looq.evidence import EvidenceError
+from looq.io import (ConfigError, RunManifest, load_config, read_json,
+                     require, sha256_file, write_json)
 from looq.pilot import (
     PilotError,
     detect_people,
@@ -205,8 +207,11 @@ def _rescale_from_height(res: dict, cfg: dict[str, Any],
     doc["height_iqr_m"] = doc["height_iqr_m"] * factor
     doc["height_p10"] = doc["height_p10"] * factor
     doc["height_p90"] = doc["height_p90"] * factor
-    doc["height_depth_slope"] = doc["height_depth_slope"] * factor
-    doc["height_depth_slope_ci95"] = [v * factor for v in doc["height_depth_slope_ci95"]]
+    # Наклон НЕ пересчитывается: м/м инвариантен к масштабу. Ниже рост и глубина
+    # умножаются на один и тот же factor, а dh/dz от этого не меняется. Прежний
+    # код домножал наклон ещё раз и занижал его ровно в factor раз: артефакт
+    # хранил -0.01634 там, где гейт по тем же массивам получает -0.01876, и
+    # уклон 4.9 % согласовывался со вторым числом, а не с первым.
     doc["pilot_heights_m"] = [round(v * factor, 4) for v in doc["pilot_heights_m"]]
     doc["pilot_depths_m"] = [round(v * factor, 4) for v in doc["pilot_depths_m"]]
     doc["independent_checks_ru"] = [
@@ -421,6 +426,14 @@ def run_self_calib_pedestrians(cfg: dict[str, Any], manifest: RunManifest) -> di
         "method": "self_calib_pedestrians", "direction": "px_to_m",
         "calib_status": "calibrated", "scale_known": True,
         "clip": str(clip).replace("\\", "/"), "reference_frame_idx": frame_idx,
+        # ПО ЧЕМУ посчитано. Без этих sha калибровка невоспроизводима: S3
+        # перезаписывает det/frames.parquet при каждом прогоне на новом
+        # материале, и артефакт калибровки, снятый по прежним детекциям,
+        # внешне ничем не отличается от снятого по нынешним.
+        "inputs_sha256": {
+            "det/frames.parquet": sha256_file("det/frames.parquet"),
+            str(clip).replace("\\", "/"): sha256_file(clip),
+        },
         "frame_w_px": w_img, "frame_h_px": h_img,
         "H": h_px_to_m.tolist(), "H_px_to_unit": cam.H_px_to_unit.tolist(),
         "K": cam.K.tolist(), "R": cam.R.tolist(), "focal_px": focal,
@@ -1216,7 +1229,7 @@ def main(argv=None) -> int:
               f"{', '.join(p.name for p in debug)}")
         return 0
 
-    except (StageError, CalibError, PilotError, ConfigError, OSError, ValueError) as exc:
+    except (StageError, EvidenceError, CalibError, PilotError, ConfigError, OSError, ValueError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

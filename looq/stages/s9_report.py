@@ -27,6 +27,7 @@ import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.geometry import ORIENTATION_DISCLAIMER
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, atomic_write_text, load_config, read_json, require
 from looq.stages._base import StageError, read_artifact_status
 
@@ -340,7 +341,7 @@ def main(argv=None) -> int:
         manifest.finish(STATUS_OK)
         print(f"[{STAGE}] записано: {OUTPUT} ({len(doc) / 1024:.0f} КБ)")
         return 0
-    except (StageError, ConfigError, OSError, ValueError, KeyError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError, ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

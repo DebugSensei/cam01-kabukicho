@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 
 from looq import STATUS_OK
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, require
 from looq.pilot import PilotError, infer_params
 from looq.stages._base import Col, StageError, build_evidence, finalize_evidence, write_parquet
@@ -254,7 +255,7 @@ def main(argv=None) -> int:
               f"{FRAMES_INDEX} ({len(res['index_rows'])} строк), пруфы {index}")
         return 0
 
-    except (StageError, PilotError, ConfigError, OSError, ValueError) as exc:
+    except (StageError, EvidenceError, PilotError, ConfigError, OSError, ValueError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{STAGE}] ОШИБКА: {exc}", file=sys.stderr)

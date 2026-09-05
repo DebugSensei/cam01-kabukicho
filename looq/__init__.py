@@ -3,7 +3,7 @@
 Правило 2 CLAUDE.md: этапы изолированы и общаются только через файлы.
 Схемы этих файлов описаны в docs/CONTRACTS.md и версионируются SCHEMA_VERSION.
 
-SCHEMA_VERSION меняется ТОЛЬКО явным решением с записью в docs/JOURNAL.md.
+SCHEMA_VERSION меняется ТОЛЬКО явным решением с записью в docs/DECISIONS.md.
 Каждый артефакт несёт свою версию внутри себя:
   * json     -> ключ "schema_version" верхнего уровня
   * geojson  -> properties.schema_version в FeatureCollection

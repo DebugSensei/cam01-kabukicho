@@ -41,6 +41,7 @@ import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
 from looq.calib import CalibError, apply_h, yaw_from_pair_via_horizon
+from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require
 from looq.pilot import PilotError, infer_params, iter_frames
 from looq.stages._base import (
@@ -329,7 +330,8 @@ def main(argv=None) -> int:
         sampler = build_evidence(cfg, STAGE, manifest)
 
         res = run(cfg, manifest, sampler)
-        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK)
+        write_parquet(OUTPUT, OUTPUT_COLS, res["rows"], STAGE, STATUS_OK,
+                      inputs=INPUTS)
         index = finalize_evidence(sampler, manifest)
 
         manifest.note("output_artifact", OUTPUT)
@@ -337,7 +339,7 @@ def main(argv=None) -> int:
         print(f"[{STAGE}] записано: {OUTPUT} ({len(res['rows'])} строк), пруфы {index}")
         return 0
 
-    except (StageError, CalibError, PilotError, ConfigError, OSError,
+    except (StageError, EvidenceError, CalibError, PilotError, ConfigError, OSError,
             ValueError, KeyError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))

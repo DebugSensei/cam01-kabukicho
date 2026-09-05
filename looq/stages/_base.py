@@ -26,8 +26,18 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from looq import SCHEMA_VERSION, STATUS_SKELETON
-from looq.evidence import EvidenceSampler, EvidenceWriter
-from looq.io import ConfigError, RunManifest, load_config, write_json
+from looq.evidence import EvidenceError, EvidenceSampler, EvidenceWriter
+import json
+
+from looq.io import (ConfigError, RunManifest, load_config, sha256_file,
+                     write_json)
+
+#: Общий конфиг пруфов и обезличивания. Один на все этапы: параметры
+#: приватности не должны расходиться между стадиями.
+EVIDENCE_CONFIG = "configs/evidence.yaml"
+
+#: Ключ метаданных parquet, под которым лежит sha входных артефактов.
+INPUTS_SHA_KEY = "inputs_sha256"
 
 STATUS_KEY = "status"
 
@@ -118,7 +128,9 @@ def write_empty_parquet(path: str | Path, cols: Sequence[Col], stage: str,
 
 
 def write_parquet(path: str | Path, cols: Sequence[Col], rows: Sequence[dict],
-                  stage: str, status: str) -> Path:
+                  stage: str, status: str,
+                  inputs: Sequence[str] | None = None,
+                  commit: bool = True) -> Path:
     """Parquet по схеме контракта. Порядок и типы колонок задаёт cols, не данные.
 
     Если строка содержит ключ не из схемы или в схеме есть ключ, которого нет
@@ -143,19 +155,49 @@ def write_parquet(path: str | Path, cols: Sequence[Col], rows: Sequence[dict],
                 raise StageError(f"строка {i}: колонка {n!r} не nullable, а получена None")
             columns[n].append(v)
 
-    schema = _arrow_schema(cols).with_metadata({
+    # sha КАЖДОГО входного артефакта. Без него перекалибровка не видна:
+    # метры в артефакте остаются от старой гомографии, а сказать об этом
+    # некому. null означает «входа не было на диске» — честное не измерено,
+    # а не ноль (правило 7).
+    meta = {
         b"schema_version": SCHEMA_VERSION.encode(),
         b"stage": stage.encode(),
         STATUS_KEY.encode(): status.encode(),
         b"coord_frames": str({c.name: c.frame for c in cols}).encode(),
-    })
+    }
+    if inputs is not None:
+        meta[INPUTS_SHA_KEY.encode()] = json.dumps(
+            {str(q): sha256_file(q) for q in inputs},
+            ensure_ascii=False, sort_keys=True).encode()
+    schema = _arrow_schema(cols).with_metadata(meta)
     table = pa.Table.from_pydict(columns, schema=schema)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
     pq.write_table(table, tmp)
+    if not commit:
+        # Этап пишет НЕСКОЛЬКО артефактов, которые читаются вместе. Подменять
+        # их по одному нельзя: падение между двумя подменами оставит следующий
+        # этап со смесью свежего файла и старого, и он этого не заметит.
+        # Здесь возвращается временный файл, а подмена делается разом через
+        # commit_parquet после того, как записаны все.
+        return tmp
     tmp.replace(p)
     return p
+
+
+def commit_parquet(tmps: Sequence[Path]) -> list[Path]:
+    """Подменить сразу все файлы, записанные с commit=False.
+
+    Полной атомарности на нескольких файлах файловая система не даёт, но окно
+    сужается с «весь тяжёлый расчёт» до «два os.replace подряд».
+    """
+    out = []
+    for tmp in tmps:
+        dst = Path(str(tmp)[:-len(".tmp")])
+        Path(tmp).replace(dst)
+        out.append(dst)
+    return out
 
 
 def write_empty_json(path: str | Path, stage: str, status: str = STATUS_SKELETON) -> Path:
@@ -221,6 +263,48 @@ def parquet_columns(path: str | Path) -> list[str]:
     return list(pq.read_schema(Path(path)).names)
 
 
+def read_inputs_sha(path: str | Path) -> dict[str, str | None] | None:
+    """Что артефакт помнит о своих входах. None — не записано вовсе."""
+    import pyarrow.parquet as pq
+
+    p = Path(path)
+    if not p.is_file():
+        return None
+    meta = (pq.read_schema(p).metadata or {})
+    raw = meta.get(INPUTS_SHA_KEY.encode())
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw.decode())
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def check_inputs_sha(path: str | Path) -> tuple[bool, list[str]]:
+    """Совпадают ли входы артефакта с тем, что лежит на диске СЕЙЧАС.
+
+    Ровно эта проверка ловит перекалибровку: гомография переписана, а метры
+    в артефакте посчитаны по старой. Молчаливое рассогласование опаснее
+    падения, потому что числа выглядят нормальными (правило 8).
+    """
+    recorded = read_inputs_sha(path)
+    if recorded is None:
+        return False, [f"{path}: sha входов не записан — нечем убедиться, "
+                       f"что артефакт посчитан по текущим входам"]
+    problems = []
+    for src, want in sorted(recorded.items()):
+        got = sha256_file(src)
+        if want is None:
+            problems.append(f"{src}: sha не был записан при прогоне")
+        elif got is None:
+            problems.append(f"{src}: входного файла больше нет на диске")
+        elif got != want:
+            problems.append(
+                f"{src}: изменился после прогона ({want[:12]}... -> "
+                f"{got[:12]}...). Числа в {path} посчитаны по старой версии")
+    return not problems, problems
+
+
 def validate_inputs(inputs: Sequence[str], stage: str) -> list[str]:
     """Артефакты предыдущих этапов существуют. Возвращает список предупреждений."""
     warnings: list[str] = []
@@ -255,19 +339,34 @@ def build_evidence(cfg: dict[str, Any], stage: str,
             f"evidence_claims. Каждый этап обязан объявить, какие утверждения он "
             f"подкрепляет кадрами (правило 1)"
         )
-    ev = cfg.get("evidence") or {}
-    priv = cfg.get("privacy") or {}
-    sampling = cfg.get("sampling") or {}
+    # Параметры обезличивания и отбора живут в configs/evidence.yaml — они
+    # общие для всех этапов. Раньше читался только конфиг САМОГО этапа, где
+    # блока privacy нет ни у одного, поэтому молча брались дефолты аргументов:
+    # face_blur_top_frac = 0.22, то самое значение, которое владелец забраковал
+    # как недостаточное (голова на дальнем плане выше в кропе, 22% её не
+    # накрывали). Правило 5 — никаких молчаливых дефолтов, правило 9 —
+    # приватность; здесь нарушались оба сразу.
+    shared = load_config(EVIDENCE_CONFIG)
+    ev = {**(shared.get("evidence") or {}), **(cfg.get("evidence") or {})}
+    priv = {**(shared.get("privacy") or {}), **(cfg.get("privacy") or {})}
+    sampling = {**(shared.get("sampling") or {}), **(cfg.get("sampling") or {})}
     model = cfg.get("model") or {}
+
+    missing = [k for k in ("face_blur_top_frac", "blur_kernel_frac",
+                           "blur_sigma_frac", "pixelate_factor") if k not in priv]
+    if missing:
+        raise ConfigError(
+            f"[{stage}] в {EVIDENCE_CONFIG} нет ключей приватности {missing}. "
+            f"Подставлять их молча нельзя: это параметры обезличивания лиц")
 
     writer = EvidenceWriter(
         root=ev.get("root", "evidence"),
         stage=stage,
         model_name=str(model.get("weights") or "none"),
-        face_blur_top_frac=float(priv.get("face_blur_top_frac", 0.22)),
-        blur_kernel_frac=float(priv.get("blur_kernel_frac", 0.35)),
-        blur_sigma_frac=float(priv.get("blur_sigma_frac", 1 / 3)),
-        pixelate_factor=int(priv.get("pixelate_factor", 16)),
+        face_blur_top_frac=float(priv["face_blur_top_frac"]),
+        blur_kernel_frac=float(priv["blur_kernel_frac"]),
+        blur_sigma_frac=float(priv["blur_sigma_frac"]),
+        pixelate_factor=int(priv["pixelate_factor"]),
         jpeg_quality=int(ev.get("jpeg_quality", 90)),
     )
     sampler = EvidenceSampler(
@@ -366,7 +465,7 @@ def stage_main(
     except StageNotImplemented as exc:
         print(f"[{stage}] ОШИБКА: {exc}", file=sys.stderr)
         return 1
-    except (StageError, ConfigError, OSError) as exc:
+    except (StageError, EvidenceError, ConfigError, OSError) as exc:
         if manifest is not None:
             manifest.finish("failed", error=str(exc))
         print(f"[{stage}] ОШИБКА: {exc}", file=sys.stderr)
