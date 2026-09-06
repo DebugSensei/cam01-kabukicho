@@ -7,7 +7,7 @@ and what it costs.
 
 Every number here was computed by code from an artifact on disk: `calib/homography.json`,
 `out/metrics.json`, `run_manifest.json`, `out/depth_cutoff.json`, `out/hour_choice.json`,
-`labels/s5_orient_24.jsonl`. Numbers that were never measured are labelled not measured
+`labels/s5_orient_50.jsonl`. Numbers that were never measured are labelled not measured
 and collected in the last section.
 
 Final run: one recorded hour, 16:25–17:25 JST 2026-09-04, `raw/peak_hour.ts`.
@@ -608,29 +608,37 @@ and is now `orientation_sector_hits_facade_m`.
 
 ### 6.2 `yaw_uncertainty_deg` is a measured uncertainty, not a decision threshold
 
-**Decision.** The value equals the measured MAE of the orientation model: **25.5°**
-instead of the 15.0 placeholder.
+**Decision.** The value equals the measured MAE of the orientation model: **21.2°**
+instead of the 15.0 placeholder. `configs/s6_attn.yaml` carries that number and the date
+it was calibrated.
 
-**The number.** `labels/s5_orient_24.jsonl`, n = 24: MAE **25.5°**, 95 % bootstrap
-**[18.7, 32.7]**, median error 24.5°, gross errors over 90° — **zero** (the sign and the
-coordinate system are right, there are no 180° reversals).
+**The number.** `labels/s5_orient_50.jsonl`, n = 50: MAE **21.2°**, 95 % bootstrap
+**[15.5, 28.8]**, median error 15.6°, p90 36.2°. `python verify/verify_s5.py` prints it.
+
+**It was measured twice, and the first measurement is why the second exists.** The first
+round used `labels/s5_orient_24.jsonl`, n = 24: MAE **25.5°** [18.7, 32.7] — but that
+labelling was taken on a three-minute morning clip while the metrics are computed over the
+evening hour, and a sector half-width is not a number to carry across scenes on trust. The
+second round was labelled on `raw/peak_hour.ts` itself, the recording the report describes,
+and gave 21.2°. Both are on disk; the config uses the second.
 
 **Why bootstrap.** The angle-error distribution is not normal and is bounded at zero.
 
 **The cost.** The old 15.0 made the sector half as wide as justified and systematically
-undercounted facade hits, which understated attention. The caveat that goes into the
-report: the labelling was taken on a three-minute morning clip while the metrics are
-computed over the evening hour. MAE is a property of the model, but occlusion is heavier
-in the dense evening scene and there it may be worse.
+undercounted facade hits, which understated attention. Going from 25.5° to 21.2° narrows
+the sector again, and that is not cosmetic: the half-width decides who counts as turned
+toward a storefront.
 
 ### 6.3 The S5 gate decides on the UPPER bound of the interval
 
 **Decision.** A point estimate below the threshold with an interval that covers the
 threshold is not a pass, it is "not confirmed".
 
-**Result.** MAE 25.5 > the 25.0 threshold → the gate **fails**. The threshold was not
-touched (rule 3). The shortfall in sample size — **24 hand-labelled people against the 200
-in CLAUDE.md** (cut to 50 by the owner) — is printed on its own line rather than hidden.
+**Result.** MAE **21.2°** is under the 25.0 threshold, but the interval
+**[15.5, 28.8]** covers it, so the gate reads **not confirmed**, not passed. The threshold
+was not touched (rule 3). The shortfall in sample size — **50 hand-labelled people against
+the 200 in CLAUDE.md** — is printed on its own line rather than hidden. The first round,
+n = 24 on a morning clip, gave 25.5° [18.7, 32.7], which was over the threshold outright.
 
 **The cost.** One red gate in the final report. That is more honest than a moved threshold.
 
@@ -745,20 +753,31 @@ contradicting each other.
 
 ### 6.11 The numbers of the final hour
 
+This table is generated from `out/metrics.json` by
+[`scripts/decisions_table.py`](../scripts/decisions_table.py), not typed. The
+previous version was carried over from an earlier run and disagreed with the
+artifact in every cell, including which storefront leads: it said M2, while the
+artifact, the dashboard and the README all say M3. Two documents naming a
+different best storefront is a defect this project has already shipped twice,
+and a hand-typed copy of a computed table will drift again on the next run.
+
 | storefront | visitors | stopped | turned (95 % Wilson) | median attention | median time in zone |
 |---|---|---|---|---|---|
-| M1 角煮/げんかつ | 1 991 | 0.05 % (n=1) | **2.91 %** [2.26, 3.75] (n=58) | 1.4 s | 18.8 s |
-| M2 入口/らーめん | 2 458 | 0 % (n=0, upper 0.16 %) | **12.65 %** [11.40, 14.03] (n=311) | 2.3 s | 17.3 s |
-| M3 芝浦ホルモン | 2 545 | 0.08 % (n=2) | **4.79 %** [4.03, 5.69] (n=122) | 1.9 s | 16.9 s |
-| M4 お好み焼き | 2 616 | 0.15 % (n=4) | **0.65 %** [0.41, 1.04] (n=17) | 1.5 s | 16.8 s |
+| M1 角煮/げんかつ | 2 198 | 0.05 % (n=1) | **2.46 %** [1.89, 3.19] (n=54) | 1.3 s | 18.4 s |
+| M2 入口/らーめん | 2 551 | 0 % (n=0, upper 0.15 %) | **7.53 %** [6.57, 8.62] (n=192) | 2.4 s | 17.0 s |
+| M3 芝浦ホルモン | 2 588 | 0.08 % (n=2) | **13.33 %** [12.08, 14.69] (n=345) | 1.4 s | 16.8 s |
+| M4 お好み焼き | 2 706 | 0.15 % (n=4) | **3.40 %** [2.78, 4.15] (n=92) | 0.6 s | 16.3 s |
 
-3 359 tracks in total, 9 610 events; the sum reconciliation in S8 balances on all 9 checks.
+3 359 tracks in total, 10 043 events; the sum reconciliation in S8 balances on all 9 checks.
 
-**The caveats that travel with the table.** Orientation coverage is **45.6 %** for the body
-and **22.4 %** for the head — the turned share is computed over a biased subsample (large,
-unoccluded people). Tracks, not people: the tracker breaks trajectories and merges
-different ones, and IDF1 is not measured. The median time in zone is close to the typical
-track length and reflects the duration of observation more than a pause at the storefront.
+The leader is **M3** at **13.33 %** [12.08, 14.69] over n=345 turned tracks, and its interval does not overlap the next storefront's.
+
+**The caveats that travel with the table.** Orientation coverage is **45.6 %**
+for the body and **22.4 %** for the head — the turned share is computed over a
+biased subsample (large, unoccluded people). Tracks, not people: the tracker
+breaks trajectories and merges different ones, and IDF1 is not measured. The
+median time in zone is close to the typical track length and reflects the
+duration of observation more than a pause at the storefront.
 
 ---
 
@@ -1097,7 +1116,7 @@ of them lying, is worse than one page that is right.
 |---|---|---|
 | AP@0.5, near and far half separately | S3 | no labelling for 300 frames |
 | IDF1 and ID switches | S4 | no labelling |
-| Angle MAE on 200 people | S5 | 24 of 200 labelled (sample cut to 50); MAE 25.5° [18.7, 32.7] |
+| Angle MAE on 200 people | S5 | 50 of 200 labelled on `raw/peak_hour.ts`; MAE 21.2° [15.5, 28.8] — the interval covers the 25.0 threshold, so the gate reads not confirmed |
 | precision of "stopped + looking" | S6 | no labelling for 100 events |
 | upper-garment colour accuracy | S7 | no labelled crops; the sample threshold was lowered to 50, which cannot confirm 0.70 |
 | recall by depth | S3 | the 70 px cutoff is a proxy, not recall |
@@ -1125,7 +1144,7 @@ dense scene.
 **The stop threshold and `min_score_for_event` are not calibrated**, and they directly
 determine the two headline numbers of the report.
 
-**The S5 gate is red.** MAE 25.5 > the 25.0 threshold. The threshold was not touched.
+**The S5 gate is not green.** MAE 21.2° is under the 25.0 threshold but its interval [15.5, 28.8] covers it, and 50 people are labelled against the 200 the rules ask for. The threshold was not touched.
 
 **The anonymisation blocker was cleared by code, not by a person.** The parameters are
 checked by tests and contact sheets; confirmation by the owner on real crops remains his
@@ -1441,7 +1460,7 @@ facial keypoints on **un-anonymised** frames.
 | `calib/debug_{vp,selfcalib,stub_affine}.png` | 10-11 each |
 | `out/check_all_compact.jpg` | 4 |
 | `out/overlay_plan_frames/` | 47 of 60 |
-| `evidence/` crops | 86 of 668 |
+| `evidence/` crops | 86 of 668 at the time of the audit; re-measured after the rebuild as 79 of 668 — 75 of the 620 old, 4 of the 48 new |
 
 The published file was downloaded from the live site and compared with the
 local one: byte for byte identical. This was not a risk, it was a publication.
@@ -1485,7 +1504,7 @@ pass over a people-free figure costs 0.13 s and returns zero boxes.
 
 **Detector, not a fixed fraction.** `blur_face_region` blurs the top share of
 a crop. Where the head is not in that share — a bent, occluded or edge-cropped
-person — the face survives; that is why 86 of 668 crops on disk were exposed,
+person — the face survives; that is why 79 of 668 crops on disk are exposed,
 and why 11 crops embedded through the *old* `anonymise=True` path were still
 exposed on the published page. The detector plus pose finds the head where it
 is. The fixed fraction stays as the mandatory fallback for a person whose pose
@@ -1552,7 +1571,7 @@ exist because a production module acquired a heavy dependency, and a design
 that needed no scaffolding would have been better.
 
 The alternative was considered and rejected by the owner: leave `evidence.py`
-on the fixed band, delete this machinery, and accept that 86 of 668 crops sit
+on the fixed band, delete this machinery, and accept that 79 of 668 crops sit
 on disk with a visible face while rule 9 says crops of faces are not written to
 disk. Their reasoning, recorded as given: a rule the project breaks itself is
 worse than fifty lines of scaffolding, and 70 s per run is an acceptable price.

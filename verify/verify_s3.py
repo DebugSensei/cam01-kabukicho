@@ -34,11 +34,18 @@ def main(argv=None) -> int:
     print(f"[S3] гейт: {REQUIREMENT}")
 
     status = read_artifact_status(ARTIFACT)
+    # Правило 8: пустой артефакт каркаса не проходит гейт НИ ПРИ КАКИХ
+    # флагах. --allow-unmeasured понижает НЕИЗМЕРЕННУЮ метрику до
+    # предупреждения; это другое. Неизмеренная метрика означает «данные
+    # есть, разметки нет», каркас — «данных нет вообще». Раньше флаг
+    # прощал и то и другое, и [S3] возвращал 0 на пустом артефакте.
     if status is None:
-        print(f"[S3] артефакт {ARTIFACT} отсутствует или без статуса")
-    elif status == STATUS_SKELETON:
-        # Правило 8: пустой артефакт каркаса не может пройти гейт ни при каких порогах.
-        print(f"[S3] артефакт {ARTIFACT} помечен status={STATUS_SKELETON} — данных нет")
+        print(f"[S3] ПРОВАЛ: артефакт {ARTIFACT} отсутствует или без статуса")
+        return 1
+    if status == STATUS_SKELETON:
+        print(f"[S3] ПРОВАЛ: артефакт {ARTIFACT} помечен "
+              f"status={STATUS_SKELETON} — данных нет, порог тут ни при чём")
+        return 1
 
     print(f"[S3] НЕ РЕАЛИЗОВАН: метрика гейта не считается, результат не подтверждён")
     if args.allow_unmeasured:

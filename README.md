@@ -73,8 +73,12 @@ reason given under [Provenance](#provenance).
   project writes goes through one function that pixelates and blurs heads first;
   `looq/anonymise.py` is the only code that encodes pixels, and it has no switch to skip
   that. The crops already on disk are older and mixed — 173 of 257 were written at a blur
-  fraction of 0.22, later raised to 0.30, and 86 of 668 still carry a sharp face because
-  the old method blurred a fixed top share rather than the head the detector finds.
+  fraction of 0.22, later raised to 0.30, and **79 of 668 still carry a sharp face**:
+  75 of the 620 written by the old method, which blurred a fixed top share rather than
+  the head a detector finds, and **4 of the 48 the dashboard rewrote through the new
+  path** — the anonymiser is limited by what the detector sees, and that limit is visible
+  in the data rather than only stated. Measured 2026-09-06 with the metric in
+  `tests/test_single_image_write.py`; the 4-of-48 figure reproduced across two rebuilds.
   Regenerating them needs a re-run of S3, S5 and S7 that has not been done; they are
   gitignored, and the published pages re-anonymise every crop through the detector as
   they embed it. Measured on the published surface: zero sharp facial keypoints.
@@ -120,8 +124,10 @@ is zero.
 decision, not an oversight: it is kept for one demonstration and removed afterwards, and
 the anonymised render already exists to replace it. The two surfaces are governed
 differently on purpose. Everything in this repository — the seven figures, the images
-embedded in the published pages, the crops the stages write — goes through the single
-write path below, and the gate measures zero sharp facial keypoints across all of it.
+embedded in the published pages — goes through the single write path below, and the
+gate measures zero sharp facial keypoints across all 58 of them. The crops the stages
+write go through the same path from now on, but they are gitignored, they are not what
+the gate walks, and 79 of the 668 sitting on disk today are still exposed.
 The video does not, because a video can be deleted and a commit cannot: a public
 repository keeps its blobs reachable by SHA long after a delete, and a Pages URL is
 indexed and cached. The source stream is public either way; what differs is who
@@ -524,7 +530,11 @@ them nothing on the dashboard can be traced back to anything:
   S1 writes it, but re-running S1 today yields a different one, so this file is the only
   record of the geometry the published numbers were computed with.
 
-**Every artifact carries the sha256 of its inputs.** `write_parquet` stores
+**Five stages declare their inputs, and three artifacts on disk carry them.**
+`track/tracks.parquet` and both S6 outputs record `inputs_sha256`; `det/frames.parquet`,
+`pose/orient.parquet` and `attr/tracks_attr.parquet` predate the mechanism and carry
+nothing, and `calib/homography.json` has none of its 52 keys — the S1, S5 and S7 gates
+fail on exactly that and are left failing. `write_parquet` stores
 `{path: sha256}` of the stage's declared inputs in the parquet file metadata, and
 `check_inputs_sha` compares what an artifact remembers against what is on disk now. The
 S1, S4, S5, S6 and S7 gates fail on a mismatch, and an artifact that recorded nothing
@@ -560,7 +570,7 @@ the anonymised one; the other two measure anonymisation on real pixels and need 
 weights — one on a frame of the source recording, one over every image in the repository
 and every image embedded in the published pages.
 
-`out/` is empty on a fresh clone: the pages exist only after a run.
+`out/` is not empty on a fresh clone: `dashboard.html` and `benchmark.html` ship, whitelisted by name in `.gitignore` because GitHub Pages serves them from there. They are the built output of the published run. Everything else in `out/` — the report, the replay, the figures, the overlay — appears only after a run of your own.
 
 `make serve` starts nginx in Docker over `out/`. Without Docker: `make serve-nodocker`
 runs a small server that implements HTTP Range, which the replay needs to seek the video.
@@ -581,15 +591,20 @@ Every run writes [`run_manifest.json`](run_manifest.json) with the weights sha25
 device, precision and library versions, because pinned requirements are only half of
 reproducibility. **That file ships with the repository**, alongside `zones/zones.json`
 and `calib/homography.json` and for the same reason: a rule that says "we use YOLO" is
-not an acceptable answer is worth nothing if the answer cannot be checked. It carries no
-personal data — model hashes, config hashes, timings, library versions and the storefront
-names.
+not an acceptable answer is worth nothing if the answer cannot be checked. It carries no data about the people in the
+scene — model hashes, config hashes, timings, library versions and the storefront names.
+Two paths in it pointed into a scratch directory and carried a Windows profile name; they
+are redacted to `<scratch>` and the redaction is recorded in the file itself.
 
-Two things it shows that are worth naming rather than leaving to be found. `s0_ingest`
-reads `not_implemented`, because it is. And S1 runs YOLO11m-pose through its own config
-key rather than the shared one, so its manifest entry records the model fields as null
-even though the calibration depends on that inference — the one stage whose model is not
-pinned where the rule says it should be.
+Three things it shows that are worth naming rather than leaving to be found.
+`s0_ingest` reads `not_implemented`, because it is. S1 runs YOLO11m-pose through its own
+config key rather than the shared one, so its manifest entry records the model fields as
+null even though the calibration depends on that inference — the one stage whose model is
+not pinned where the rule says it should be. And the `s1_calib` entry is **not the run
+that produced the published geometry**: it is a later diagnostic re-run into a scratch
+file, focal 947 px against the 1030 px in `calib/homography.json`. The run that wrote the
+artifact is not in the manifest at all, which is the same irreproducibility the
+Limitations table describes, showing up in a second place.
 
 ---
 
@@ -600,7 +615,7 @@ pinned where the rule says it should be.
 | Source of scale | Scale comes from the median pedestrian height. Street width was rejected as the source: the 6.06 m satellite reference implies a 1.93 m median height. | Height is not an independent check — it defines the scale. One independent check remains: the implied L1–L3 distance of 5.28 m falls inside the plausible 4.6–5.6 m. |
 | Street grade | The ground is modelled as flat, yet reconstructed height drifts with depth. A 4.9 % grade would explain it. | Lengths and speeds are distorted more far from the camera than near it. Sensitivity analysis excludes the calibration as the cause; the scene is not identified. |
 | Vanishing point vs horizon | The two estimates disagree by 104 px against an 87 px tolerance. | Two independent estimates of one quantity did not converge; focal length, and with it scale, are less well determined than we would like. |
-| Reproducibility of the calibration | The published geometry is reproducible only from an archived input. Its sha256 is now recorded in `calib/homography.json`, but the detections file it was computed from has been overwritten by a later S3 run. | The S1 gate fails 7 of its 9 checks and every failure is left standing rather than hidden: this provenance check (deliberate), the held-out reprojection error that the self-calibration path never implemented, the height spread, the pedestrian speed and the facade baselines the gate asks for and the artifact does not carry, and the vanishing-point holdout residual. On the next full run the calibration is measured afresh and every metre in the report is recomputed with it. |
+| Reproducibility of the calibration | The published geometry is reproducible only from an archived input. No sha of its input is recorded in the published `calib/homography.json` — the field was added to S1 after this artifact was written — and the detections file it was computed from has since been overwritten by a later S3 run. The S1 provenance check fails for exactly that reason and is left failing. | The S1 gate fails 7 of its 9 checks and every failure is left standing rather than hidden: this provenance check (deliberate), the held-out reprojection error that the self-calibration path never implemented, the height spread, the pedestrian speed and the facade baselines the gate asks for and the artifact does not carry, and the vanishing-point holdout residual. On the next full run the calibration is measured afresh and every metre in the report is recomputed with it. |
 
 ## Not measured
 

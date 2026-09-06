@@ -134,9 +134,14 @@ homography — fail at once.
 
 ## 3. S1 calib — `calib/homography.json`
 
-The method is `auto_vp_height`: there are no hand measurements of the geometry, the scale
-is extracted from the height of people in frame. The scheme is in `docs/S1_TASK.md`, the
-implementation in `looq/calib.py`.
+The method is **`self_calib_pedestrians`** (`configs/s1_calib.yaml`, key
+`method`), and that is what the published artifact records. There are no hand
+measurements of the geometry: the horizon and the focal length come from pedestrian
+pairs, and the scale from the median height of the sample. `auto_vp_height` /
+`vanishing_points` is a legacy path kept in `looq/stages/s1_calib.py` as a synonym; it
+was **not** used for this run, and §3.1.1 below describes its clicked seeds and does not
+apply to the current artifact. The scheme is in `docs/S1_TASK.md`, the implementation in
+`looq/calib.py`.
 
 **Units before the scale is fixed.** Everything is computed in CAMERA-HEIGHT UNITS: the
 camera stands at exactly 1.0 unit above the origin. Plan coordinates and a person's height
@@ -144,17 +149,25 @@ are therefore in the same units, and a single multiplier `scale_m_per_unit` conv
 of it to metres at once. Separate multipliers for the plan and for height would drift
 apart, and the street-width check would stop checking anything.
 
-Artifact keys:
+Artifact keys, as they are in the published `calib/homography.json` — all 52 of
+them:
 
 | Group | Keys |
 |---|---|
-| geometry | `H` (3×3, px→m), `H_px_to_unit`, `K`, `R`, `focal_px`, `vp_horizontal`, `vp_vertical`, `horizon_line`, `scale_m_per_unit`, `camera_height_m`, `origin_px`, `axis_convention` |
-| VP quality | `hint_line_residual_px`, `vp_inliers_used`, `vp_holdout_residual_px`, `vp_holdout_n` |
-| height sample | `n_people_used`, `pilot_filter_stats`, `height_median_m`, `height_iqr_m`, `height_p10`, `height_p90`, `height_depth_slope`, `height_depth_slope_ci95` |
-| speed | `speed_median_mps`, `speed_n_tracks` |
-| street width | `street_width_measured_m`, `street_width_reference_m`, `street_width_delta_m`, `facade_baselines` |
-| pilot samples | `pilot_heights_m`, `pilot_depths_m`, `pilot_speeds_mps` |
-| assumptions | `assumptions_ru`, `method`, `direction: "px_to_m"` |
+| geometry | `H`, `H_px_to_unit`, `K`, `R`, `focal_px`, `focal_over_diagonal`, `vp_horizontal`, `vp_vertical`, `horizon_line`, `camera_height_m`, `axis_convention`, `direction`, `frame_w_px`, `frame_h_px`, `reference_frame_idx`, `clip` |
+| fit quality | `horizon_inlier_frac`, `horizon_n_pairs`, `horizon_residual_px`, `vertical_inlier_frac`, `vertical_n_segments`, `vp_horizon_tol_used_px`, `vp_street_dist_from_centre_px`, `vp_street_to_horizon_px` |
+| height sample | `n_people_used`, `height_median_m`, `height_iqr_m`, `height_p10`, `height_p90`, `height_depth_slope`, `height_depth_slope_ci95`, `height_depth_slope_covers_zero` |
+| scale | `scale_m_per_unit`, `scale_known`, `scale_rescale_factor`, `calib_status` |
+| street width (implied, a check not a source) | `street_width_L1L3_implied_m`, `street_width_implied_plausible`, `street_width_implied_range_m`, `street_width_reference_m`, `street_width_units`, `street_grade` |
+| pilot samples | `pilot_heights_m`, `pilot_depths_m` |
+| what the stage says about itself | `method`, `status`, `stage`, `schema_version`, `banner_ru`, `assumptions_ru`, `scale_source_ru`, `independent_checks_ru` |
+
+**Thirteen keys the S1 gate asks for and this artifact does not carry**, which is why it
+fails 7 of its 9 checks: `origin_px`, `hint_line_residual_px`, `vp_inliers_used`, `vp_holdout_residual_px`, `vp_holdout_n`, `pilot_filter_stats`, `speed_median_mps`, `speed_n_tracks`, `street_width_measured_m`, `street_width_delta_m`, `facade_baselines`, `pilot_speeds_mps`, `vp_seed_pairwise_spread_px`. Earlier
+revisions of this document listed them as if they were present. They are not, and their
+absence is not a documentation slip — it is the state of the calibration, recorded in
+`docs/DECISIONS.md` and in the Limitations table of the README. The gate prints each
+missing key by name rather than reporting a single failure.
 
 **The pilot samples sit in the artifact deliberately.** The gate recomputes the medians,
 the spread and the regression **itself** instead of reading `height_median_m` and
@@ -250,10 +263,20 @@ homography.
 
 ### 3.2. What in the S1 gate is independent and what is not
 
-The wording for the report, verbatim:
+The wording CLAUDE.md asks the gate to satisfy:
 
 > The scale is estimated from the sampled median height; independently confirmed two
 > ways — by the median pedestrian speed and by the street width from satellite.
+
+**The published artifact does not satisfy it, and says so in its own fields.**
+`scale_source_ru` reads: the median height 1.68 m; street width as a source of scale
+REJECTED, because the 6.06 m reference gives a median height of 1.93 m, outside
+1.55–1.75. `independent_checks_ru` reads: height is no longer an independent check — it
+sets the scale; one check remains, the implied L1–L3 width of 5.28 m falling inside the
+plausible range. Neither `pilot_speeds_mps` nor `facade_baselines` is in the artifact, so
+the speed and street-width checks cannot be computed at all, and `verify_s1.py` fails both
+by name. The table below is therefore what the gate WOULD check, with the current state of
+each in the last column.
 
 | Check | Threshold | Role | Independent? |
 |---|---|---|---|
@@ -275,10 +298,10 @@ synthetic data: with the scale drifting 0.8×…1.25×, the median stays at 1.72
 while the IQR moves from 0.09 to 0.36 m (fails). The function is
 `looq.geometry.height_spread_stats`.
 
-The pilot samples sit in the artifact itself: `pilot_heights_m` and `pilot_speeds_mps`
-(lists of floats, at least `gates.min_pilot_samples` values). The gate computes the medians
-and the spread **itself** instead of reading finished numbers — for the same reason as with
-the street width.
+The pilot samples sit in the artifact itself so that the gate can compute the medians and
+the spread **itself** instead of reading finished numbers — for the same reason as with the
+street width. `pilot_heights_m` and `pilot_depths_m` are there. `pilot_speeds_mps` is not,
+which is why the median-speed check has nothing to run on.
 
 The height and speed ranges were widened from the originals in CLAUDE.md by an owner
 decision on 2026-09-03. The reason is in `docs/DECISIONS.md`.

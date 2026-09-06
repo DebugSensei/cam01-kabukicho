@@ -57,7 +57,7 @@
       "started_at": "2026-09-05T11:10:57.197+00:00",
       "finished_at": "2026-09-05T11:11:43.058+00:00",
       "status": "ok",
-      "config_path": "C:\\Users\\IVANPO~1\\AppData\\Local\\Temp\\claude\\C--projects-japan-computer-vision\\50a6f2ef-b857-488c-b9e8-545c2fbdacc1\\scratchpad\\s1dry\\s1_dry.yaml",
+      "config_path": "<scratch>/s1_dry.yaml",
       "config_sha256": "8b87dbbdd65ea265c43c282d131027554b050c6870dd50226e129863c7d8d06f",
       "model": {
         "weights": null,
@@ -101,11 +101,14 @@
         "height_median_m": 1.9895236642108203,
         "calib_status": "scale_from_height",
         "scale_rescale_factor": 0.8444232306562695,
-        "output_artifact": "C:\\Users\\IVANPO~1\\AppData\\Local\\Temp\\claude\\C--projects-japan-computer-vision\\50a6f2ef-b857-488c-b9e8-545c2fbdacc1\\scratchpad\\s1dry\\homography.after.json",
+        "output_artifact": "<scratch>/homography.after.json",
         "debug_artifacts": [
           "calib\\debug_selfcalib.png"
-        ]
-      }
+        ],
+        "path_redacted_ru": "Пути велись во временный каталог сессии; они содержали имя профиля Windows и идентификатор сессии и заменены на <scratch>. Ничего, кроме местоположения файлов, редактирование не меняет."
+      },
+      "not_the_published_run": true,
+      "not_the_published_run_ru": "ЭТО НЕ ТОТ ПРОГОН, ЧТО ДАЛ ОПУБЛИКОВАННУЮ ГЕОМЕТРИЮ. Диагностический перепрогон S1 в отдельный файл: focal 947.3 px, медиана роста 1.9895 м. В calib/homography.json лежит focal 1029.8 px, медиана 1.68 м. Прогон, записавший артефакт, в манифесте НЕ ЗАФИКСИРОВАН: поле inputs_sha256 появилось в S1 позже, и именно эта невоспроизводимость — главная находка проекта (README, Limitations)."
     },
     "s2_zones": {
       "stage": "s2_zones",
