@@ -35,6 +35,7 @@ from looq.io import atomic_write_text, load_config, read_json, require  # noqa: 
 from looq.evidence import (EvidenceError, EvidenceSampler,  # noqa: E402
                            EvidenceWriter, blur_face_region)
 from looq.pilot import iter_frames  # noqa: E402
+from looq.anonymise import anonymise, data_uri  # noqa: E402
 
 OUT = Path("out/dashboard.html")
 N_PROOFS = 12
@@ -925,46 +926,32 @@ def _priv_top_frac() -> float:
                  .get("face_blur_top_frac", 0.0))
 
 
-def b64_img(path: Path, max_w: int | None = None, quality: int = 92,
-            anonymise: bool = False) -> str | None:
+def b64_img(path: Path, max_w: int | None = None,
+            quality: int = 92) -> str | None:
     """Картинка в data-URI. Пруфы вшиваются ПО ОДНОМУ, а не монтажом: монтаж
     ужимает кропы, и мелкий человек превращается в кашу.
 
-    anonymise=True — прогнать кроп через обезличивание ЕЩЁ РАЗ, по текущему
-    порогу из configs/evidence.yaml. Кропы на диске писались разными прогонами
-    и несут разные пороги: часть сделана при 0.22, который владелец потом
-    поднял до 0.30. Страница обязана показывать текущий порог независимо от
-    того, когда кроп записан, а повторное размытие уже размытого безвредно.
+    Обезличивание НЕ параметр. Прежняя подпись имела anonymise=False по
+    умолчанию, и этого хватило: вызов для пруфов флаг передавал, вызов для
+    трёх больших фигур — нет, и в опубликованном dashboard.html оказалось
+    14 картинок из 51 с резкими лицами, в одной 27 лицевых кейпоинтов из 31.
+    Теперь путь один — looq.anonymise.data_uri, — и отключить его нечем.
+
+    Уменьшение идёт ПОСЛЕ обезличивания намеренно: детектор на уменьшенной
+    картинке находит меньше людей, а размывать надо всех, кого видно
+    в оригинале.
     """
     img = cv2.imread(str(path))
     if img is None:
         return None
-    if anonymise:
-        priv = load_config("configs/evidence.yaml").get("privacy") or {}
-        need = ("face_blur_top_frac", "blur_kernel_frac", "blur_sigma_frac",
-                "pixelate_factor")
-        missing = [k for k in need if k not in priv]
-        if missing:
-            # Правило 8: молча отдать кроп с диска, не зная порога, значило бы
-            # опубликовать его с тем размытием, какое случайно оказалось.
-            raise SystemExit(
-                f"в configs/evidence.yaml нет ключей приватности {missing}: "
-                f"вшивать пруфы без порога обезличивания нельзя")
-        try:
-            img, _ = blur_face_region(
-                img,
-                top_frac=float(priv["face_blur_top_frac"]),
-                kernel_frac=float(priv["blur_kernel_frac"]),
-                sigma_frac=float(priv["blur_sigma_frac"]),
-                pixelate_factor=int(priv["pixelate_factor"]))
-        except EvidenceError:
-            pass          # область уже однородна: кроп обезличен своей стадией
+    anonymise(img)
     if max_w and img.shape[1] > max_w:
         s = max_w / img.shape[1]
         img = cv2.resize(img, (max_w, int(img.shape[0] * s)), interpolation=cv2.INTER_AREA)
-    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
-    return ("data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
-            if ok else None)
+    # Картинка уже обезличена: encode_image прогонит детектор второй раз и
+    # ничего не найдёт (области однородны). Это дешевле, чем держать вторую
+    # точку кодирования, которую можно позвать в обход.
+    return data_uri(img, quality=quality)
 
 
 def _n_labels() -> int:
@@ -988,7 +975,7 @@ def sheet_html(rows, note: str) -> str:
     ошибка, из-за которой сетку у M2 приняли за 12 посетителей."""
     cells = []
     for r in rows:
-        uri = b64_img(Path(r["path"]), anonymise=True)
+        uri = b64_img(Path(r["path"]))
         if uri is None:
             continue
         try:

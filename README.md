@@ -5,7 +5,7 @@ Street-level attention analytics from a single fixed camera.
 ![Python 3.10](https://img.shields.io/badge/python-3.10-3776ab)
 ![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76b900)
 ![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![tests 110](https://img.shields.io/badge/tests-110-2ea44f)
+![tests 113](https://img.shields.io/badge/tests-113-2ea44f)
 
 ![Dashboard](docs/img/dashboard.webp)
 
@@ -69,11 +69,15 @@ reason given under [Provenance](#provenance).
 - **Not interest.** A geometric ray crossing a segment is not a mental state.
 - **No demographics.** Gender, age and ethnicity are not estimated and will not be:
   privacy, and no ground truth to gate them against.
-- **No face recognition, no re-identification across cameras.** Face regions in every
-  published crop are pixelated and blurred before anything reaches disk. The setting on
-  disk is mixed: 173 of 257 crops were written at a blur fraction of 0.22, which the
-  owner later raised to 0.30 because at distance the head sits higher in the crop.
-  Regenerating them needs a re-run of S3, S5 and S7 that has not been done.
+- **No face recognition, no re-identification across cameras.** Every image the
+  project writes goes through one function that pixelates and blurs heads first;
+  `looq/anonymise.py` is the only code that encodes pixels, and it has no switch to skip
+  that. The crops already on disk are older and mixed — 173 of 257 were written at a blur
+  fraction of 0.22, later raised to 0.30, and 86 of 668 still carry a sharp face because
+  the old method blurred a fixed top share rather than the head the detector finds.
+  Regenerating them needs a re-run of S3, S5 and S7 that has not been done; they are
+  gitignored, and the published pages re-anonymise every crop through the detector as
+  they embed it. Measured on the published surface: zero sharp facial keypoints.
 - **No shop entries.** There is no metric for "walked through the door"; the funnel
   ends at "stopped".
 
@@ -103,6 +107,14 @@ the blur follows the facial keypoints rather than a fixed band, because a bowed 
 falls outside the band. Measured over twenty frames: 354 confident facial keypoints
 before, one after, and none of them retaining facial detail. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) §13.
+
+That guarantee used to hold for this one file and not for the other twelve places that
+write an image, and the gap was published before it was found — see the tenth defect in
+[How errors were found](#how-errors-were-found). It now holds for all of them through a
+single write path, §14. It is a claim about the path, not about every face: the
+anonymiser is limited by what the detector sees, and a person neither network finds at
+confidence 0.05 is not blurred. What is measured is the published surface, and there it
+is zero.
 
 **The recording linked above predates that change and is not anonymised.** It is the
 earlier render, kept for a demonstration and due to be replaced by the anonymised one.
@@ -324,10 +336,11 @@ other way, to **514** — see below.
 
 ## How errors were found
 
-Nine defects in the code, caught by measurement rather than by looking: four from
+Ten defects in the code, caught by measurement rather than by looking: four from
 building the pipeline, three from a review that read every claim back against the
 artifacts, one from a dry run that re-computed a stage into a scratch file and diffed it
-against the artifact in use, one from synthetic data with known ground truth.
+against the artifact in use, one from synthetic data with known ground truth, and one
+from an audit of every path in the project that writes an image.
 
 Then twenty more in the prose — the commit messages and this file — found the same way,
 by re-reading them against the code. Those are described at the end of this section,
@@ -428,6 +441,41 @@ cancel under averaging — it pushes the median up. On synthetic tracks with a t
 of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS slope over
 the whole burst.
 
+**Unblurred faces were published, because anonymisation was a step and not a
+path** (`scripts/make_dashboard.py:928`). The signature read
+`b64_img(path, max_w=None, quality=92, anonymise: bool = False)`. Two call sites in the
+same file: the evidence grid passed `anonymise=True`, the figure block did not and took
+the default. The page it builds is one of the two published to GitHub Pages.
+
+Measured with the metric the overlay is held to — facial keypoints at `conf >= 0.30`
+whose 30 px neighbourhood has a mean absolute Laplacian above 13.4 — the **live**
+`dashboard.html`, downloaded from the site and byte-identical to the local copy, carried
+sharp facial keypoints on **14 of its 51 embedded images**, one of them 27 of 31. For
+scale, the control: all 18 raw frames in `raw/` are exposed, and all 7 figures tracked in
+`docs/img/` are clean.
+
+The audit that found it covered every path that writes an image, and the same defect was
+underneath several of them: `out/img/zones_ref.jpg` (26), three S1 debug frames in
+`calib/` (10-11 each), the contact sheet (4), 86 of the 668 evidence crops. The crops are
+the sharpest lesson: they had *already* been anonymised, by blurring a fixed top share of
+each crop, and where the head was not in that share the face survived.
+
+The fix is structural, not another call site. `looq/anonymise.py` is now the only code in
+the project that turns pixels into bytes, it anonymises before encoding, and it has no
+parameter to switch that off. Every writer calls it, including
+`looq.evidence._write_jpeg`; `render_overlay` gave up its second copy of the anonymiser,
+because two copies of one guarantee drift apart. Three tests hold it: an AST walk that
+fails on any raw `cv2.imwrite`, `savefig` or `from cv2 import imwrite` outside that
+module, a signature check for an off switch, and the measurement itself over every image
+in git and every image embedded in the published pages.
+
+That last test then failed the first fix, which is the useful part of the story. The
+anonymiser had been running inference at a resolution matched to the image — 320 px for a
+small crop — and at 320 the pose model found no head keypoints at all on a 114x248 crop,
+leaving only the fallback band over the top 30 % while the face sat at 82 % of the crop
+height. The same crop at 1280 gives a nose at confidence 0.95. The rule is now written
+down: the anonymiser looks at no lower a resolution than the gate does.
+
 **Two audits after the code was finished, because the code was not the only thing
 that could be wrong.**
 
@@ -496,14 +544,15 @@ to walk through which function computed which number to reach it.
 ```bash
 pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
 pip install -r requirements.txt
-python -m pytest tests/ -o addopts="" -q     # 107 passed, 3 skipped on a fresh clone
+python -m pytest tests/ -o addopts="" -q     # 109 passed, 4 skipped on a fresh clone
 make serve                                    # http://localhost:8080, serves out/
 ```
 
-110 tests are collected; three of them need artifacts a fresh clone does not have and
+113 tests are collected; four of them need artifacts a fresh clone does not have and
 skip. Two check that every row of the evidence index points at a file that exists and is
-the anonymised one; the third measures anonymisation on a real frame and needs both model
-weights and the source recording.
+the anonymised one; the other two measure anonymisation on real pixels and need the model
+weights — one on a frame of the source recording, one over every image in the repository
+and every image embedded in the published pages.
 
 `out/` is empty on a fresh clone: the pages exist only after a run.
 
@@ -575,19 +624,24 @@ the model is nevertheless not a one-file change — Ultralytics is also construc
 `looq/stages/s1_calib.py` (the pose model that fixes the metric scale) and imported in
 `looq/stages/s4_track.py` (`BYTETracker`), plus two helper scripts.
 
-Source footage is a third-party public live stream. Three frames of it are committed as
-figures in `docs/img/` — the overlay still, the zone reference and the vanishing-point
-frame — and all three **are** anonymised: `scripts/anonymise_figures.py` runs the
-detector over each and applies the same `looq/evidence.py::blur_face_region` used on the
-evidence crops, at a deliberately low detector threshold because a blurred lamppost
-costs nothing and a missed face costs everything. `docs/img/dashboard.webp` embeds 48
-evidence crops of real people, blurred by the same function.
+Source footage is a third-party public live stream. Four of the seven figures committed
+in `docs/img/` are street scenes — the overlay still, the zone reference, the
+vanishing-point frame, and the dashboard screenshot with its 48 embedded crops — and all
+four **are** anonymised. They go through `looq/anonymise.py` like every other image the
+project writes: a detector and a pose model locate heads at a deliberately low threshold,
+because a blurred lamppost costs nothing and a missed face costs everything. The last
+pass blurred 49 boxes in the dashboard screenshot, 28 in the zone reference, 19 in the
+overlay still and 15 in the vanishing-point frame. The three charts got zero, which is
+the answer rather than an exemption: they are run through the same path, and the detector
+finds nothing to blur.
 
-One honest limit on that: the blur covers the top 30 % of a person's box, so a head
-sitting lower in the frame than the box implies is not structurally guaranteed to be
-covered. Measured on the committed figures, no confident facial keypoint survives in a
-sharp region — but the mechanism is a band, not a face detector, and "no face imagery"
-rests on that measurement rather than on the design.
+The mechanism used to be a fixed band over the top 30 % of a person's box, which missed
+any head sitting lower than the box implied. It is now the head the pose model finds,
+with that band kept only as the fallback for a person whose pose gave no keypoints.
+Measured with the project's own metric over all seven committed figures: zero facial
+keypoints in a sharp region. What that does not prove is that no face is recognisable to
+a person — only that where a pose model finds a face, no high-frequency detail is left,
+and that a person neither network detects at confidence 0.05 is not blurred at all.
 
 Beyond those, this repository contains no raw
 video, no unblurred crops and no face imagery: `raw/`, `*.ts`, `*.mp4` and `*.pt` are

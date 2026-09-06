@@ -1366,3 +1366,134 @@ retire it.
 
 The old version of the video on YouTube is to be deleted: it contains the same
 frames without anonymisation.
+
+---
+
+## 14. Anonymisation as a path, not a step
+
+### 14.1. What was found
+
+Section 13 made the overlay video anonymised by construction. It closed one
+file. On 2026-09-06 the same question was asked of every other path that
+writes an image, and the answer was worse than expected.
+
+Measured with the project's own metric — the one in
+`tests/test_overlay_anonymised.py`: pose at `imgsz=1280 conf=0.25`, facial
+keypoints COCO 0-4 at `conf >= 0.30`, sharpness = mean absolute Laplacian in a
+30x30 window, exposed above 13.4, the fifth percentile of sharpness around
+facial keypoints on **un-anonymised** frames.
+
+| Where | Images with sharp facial keypoints |
+|---|---|
+| `raw/probe_*.jpg`, the control | 18 of 18, up to 21 keypoints |
+| `docs/img/*.webp`, tracked in git | 0 of 7 |
+| **`out/dashboard.html`, live on GitHub Pages** | **14 of 51; one carried 27 of 31** |
+| `out/report.html`, not published | 2 of 4 |
+| `out/img/zones_ref.jpg` | 26 |
+| `calib/debug_{vp,selfcalib,stub_affine}.png` | 10-11 each |
+| `out/check_all_compact.jpg` | 4 |
+| `out/overlay_plan_frames/` | 47 of 60 |
+| `evidence/` crops | 86 of 668 |
+
+The published file was downloaded from the live site and compared with the
+local one: byte for byte identical. This was not a risk, it was a publication.
+
+### 14.2. The cause was one default
+
+```python
+def b64_img(path, max_w=None, quality=92, anonymise: bool = False):
+```
+
+Two call sites in the same file. `sheet_html` passed `anonymise=True` for the
+evidence crops. The figure block, `make_dashboard.py:1394`, did not, and got
+the default. One remembered, one forgot.
+
+Nothing about that is unusual, and that is the point: a step a caller can skip
+will eventually be skipped. The defect was not in the page. It was in
+anonymisation being a step at all.
+
+### 14.3. The fix: one write path
+
+`looq/anonymise.py` is now the only place in the project that turns pixels
+into bytes. `save_image`, `encode_image`, `data_uri` and `save_figure`
+anonymise first, always. There is no parameter that disables it, because that
+parameter was the defect.
+
+Every previous writer now calls it: `make_figures`, `make_readme_figures`,
+`make_dashboard`, `contact_sheet_all`, `check_blur`, `density_curve`,
+`pick_hour`, `anonymise_figures`, `render_overlay`, `s1_calib` (six debug
+images), `s9_report` and `looq.evidence._write_jpeg`.
+
+`render_overlay` kept a second copy of the anonymiser. It does not any more —
+it imports the one implementation. Two copies of the same guarantee drift:
+you fix one and forget the other, which is the defect of 14.2 wearing a
+different hat.
+
+**No exemption for images without people.** A matplotlib figure with no faces
+is tempting to exempt, and an exemption by image type is exactly the loophole
+being closed — "it's only a plot" reads the same whether or not the plot has
+an `imshow` of a frame in it. Measurement removes the argument: a detector
+pass over a people-free figure costs 0.13 s and returns zero boxes.
+
+**Detector, not a fixed fraction.** `blur_face_region` blurs the top share of
+a crop. Where the head is not in that share — a bent, occluded or edge-cropped
+person — the face survives; that is why 86 of 668 crops on disk were exposed,
+and why 11 crops embedded through the *old* `anonymise=True` path were still
+exposed on the published page. The detector plus pose finds the head where it
+is. The fixed fraction stays as the mandatory fallback for a person whose pose
+gave no head keypoints, and is not removed.
+
+### 14.4. The gate found a defect in its own fix
+
+The first version of `_imgsz_for` ran inference at a resolution matched to the
+image: 320 for a small crop. The gate failed on four crops. Diagnosis: at 320
+the pose model found **no head keypoints at all** on a 114x248 crop, so only
+the fallback applied — the top 30 % of the person box — while the face lay at
+82 % of the crop height. The same crop at 1280 gives a nose at confidence 0.95.
+
+The rule is now explicit: **the anonymiser looks at no lower a resolution than
+the gate does**. `CHECK_IMGSZ = 1280`. Otherwise it cannot see what the check
+will see, and that is not a hypothetical — it cost four crops on the first
+build.
+
+### 14.5. Enforcement
+
+Three tests in `tests/test_single_image_write.py`:
+
+- `test_no_raw_image_write_outside_the_module` walks the **syntax tree** of
+  every file in `looq/`, `scripts/` and `verify/` for `cv2.imwrite`,
+  `cv2.imencode`, `savefig`, `imsave`, a PIL `.save`, and for
+  `from cv2 import imwrite`. Not grep: grep does not see a renamed import, and
+  it cannot tell a call from the docstring in `looq/evidence.py` that
+  describes this very prohibition.
+- `test_anonymise_has_no_off_switch` checks the signatures for a parameter
+  that could disable anonymisation, and checks by AST that `encode_image`
+  calls the anonymiser and that `save_image` goes through `encode_image`.
+- `test_no_sharp_faces_anywhere` is the measurement: every image tracked in
+  git plus every `data:` URI in `out/dashboard.html` and `out/benchmark.html`
+  — 58 images — must carry zero sharp facial keypoints. It skips without model
+  weights, because a gate that cannot run stops being run and stops
+  protecting.
+
+### 14.6. What was not done, and why
+
+The crops on disk under `evidence/` are not regenerated. Doing so means
+re-running S3, S5 and S7, and the owner has ruled that out. They are
+gitignored, they never leave the machine, and the pages now re-anonymise every
+crop through the detector at embed time, so the published surface is clean
+while the local files are not. `out/overlay_plan_frames/` is stale output from
+before section 13 and is gitignored for the same reason.
+
+`out/report.html` remains unpublished (section 12), now for a measured reason
+rather than an editorial one.
+
+### 14.7. What this still does not prove
+
+The anonymiser is detector-limited. A person neither network finds at
+confidence 0.05 is not blurred. Measured on the 60 saved overlay frames:
+4 sharp facial keypoints across all of them fell inside a person box, meaning
+the detector missed those people at render time and found them afterwards.
+"By construction" describes the path, not a guarantee that no face survives.
+The gate measures the published surface, and the published surface is at zero;
+that is a smaller claim than "no face is ever recognisable", and it is the one
+supported by the numbers.

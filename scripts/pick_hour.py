@@ -30,6 +30,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from looq.anonymise import save_figure  # noqa: E402
 from looq.io import library_versions, load_config, sha256_file, utc_now_iso, write_json  # noqa: E402
 from looq.pilot import infer_params  # noqa: E402
 
@@ -213,7 +214,7 @@ def _plot(samples: list[dict], best: dict, args) -> None:
     ax.grid(alpha=0.25, lw=0.5)
     fig.tight_layout()
     OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_PNG)
+    save_figure(fig, OUT_PNG)
     plt.close(fig)
 
 

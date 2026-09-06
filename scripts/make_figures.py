@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_overlay import PlanView, ZONE_COLORS, track_color  # noqa: E402
 
 from looq.geometry import point_in_polygon_m  # noqa: E402
+from looq.anonymise import save_image  # noqa: E402
 from looq.io import load_config, read_json, require  # noqa: E402
 
 OUT_DIR = Path("out/img")
@@ -110,7 +111,7 @@ def plan_all(tracks, zones, unit: str, path: Path) -> None:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 60, 60), 2, cv2.LINE_AA)
     cv2.putText(img, f"{n} trajectories inside ROI (of {n_all} total)", (16, 56),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 60, 60), 2, cv2.LINE_AA)
-    cv2.imwrite(str(path), img)
+    save_image(path, img)
     print(f"  {path} ({n} траекторий)")
 
 
@@ -130,7 +131,7 @@ def zones_ref(video: Path, zones, frame_idx: int, path: Path) -> None:
         x0, y0 = int(fac["poly"][:, 0].min()), int(fac["poly"][:, 1].min())
         cv2.putText(frame, zid.replace("facade_", ""), (x0, max(22, y0 - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, fac["color"], 3, cv2.LINE_AA)
-    cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    save_image(path, frame, quality=90)
     print(f"  {path}")
 
 
@@ -167,8 +168,7 @@ def main(argv=None) -> int:
         near = sorted(src.glob("*.jpg"), key=lambda p: abs(int(p.stem[1:]) - fi))
         if near:
             img = cv2.imread(str(near[0]))
-            cv2.imwrite(str(args.out_dir / "gaze_example.jpg"), img,
-                        [cv2.IMWRITE_JPEG_QUALITY, 90])
+            save_image(args.out_dir / "gaze_example.jpg", img, quality=90)
             print(f"  {args.out_dir / 'gaze_example.jpg'} (кадр {near[0].stem})")
     return 0
 

@@ -23,6 +23,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.io import read_json  # noqa: E402
+from looq.anonymise import save_image  # noqa: E402
 
 OUT_DIR = Path("docs/img")
 WIDTH = 1200
@@ -42,7 +43,7 @@ def save(out_dir: Path, name: str, img: np.ndarray) -> None:
         img = cv2.resize(img, (WIDTH, int(round(img.shape[0] * s))),
                          interpolation=cv2.INTER_AREA)
     p = out_dir / name
-    cv2.imwrite(str(p), img, [cv2.IMWRITE_WEBP_QUALITY, QUALITY])
+    save_image(p, img, quality=QUALITY)
     print(f"  {p}  {p.stat().st_size / 1024:.0f} KB  {img.shape[1]}x{img.shape[0]}")
 
 

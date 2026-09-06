@@ -40,6 +40,7 @@ from looq.calib import (
     vp_candidates_on_line,
 )
 from looq.geometry import ORIENTATION_DISCLAIMER, facade_lines_separation_m, height_spread_stats
+from looq.anonymise import save_figure, save_image
 from looq.evidence import EvidenceError
 from looq.io import (ConfigError, RunManifest, load_config, read_json,
                      require, sha256_file, write_json)
@@ -960,7 +961,7 @@ def write_debug(res: dict, out_dir: Path) -> list[Path]:
     ax.legend(fontsize=8)
     fig.tight_layout()
     p = out_dir / "debug_topdown.png"
-    fig.savefig(p); plt.close(fig); written.append(p)
+    save_figure(fig, p); plt.close(fig); written.append(p)
 
     # 2. опорный кадр: инлаеры VP, горизонт, клики
     img = res["ref"].copy()
@@ -986,7 +987,7 @@ def write_debug(res: dict, out_dir: Path) -> list[Path]:
         cv2.putText(img, line_id, (int(pts[0][0]) + 10, int(pts[0][1]) - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
     p = out_dir / "debug_vp.png"
-    cv2.imwrite(str(p), img); written.append(p)
+    save_image(p, img); written.append(p)
 
     # 3. рост: гистограмма и дрейф по глубине
     heights, slope = res["heights_m"], res["slope"]
@@ -1007,7 +1008,7 @@ def write_debug(res: dict, out_dir: Path) -> list[Path]:
     a2.legend(fontsize=8); a2.set_title("Дрейф роста по глубине", fontsize=9)
     fig.tight_layout()
     p = out_dir / "debug_heights.png"
-    fig.savefig(p); plt.close(fig); written.append(p)
+    save_figure(fig, p); plt.close(fig); written.append(p)
     return written
 
 
@@ -1046,7 +1047,7 @@ def _write_selfcalib_debug(res: dict, out_dir: Path) -> Path:
         cv2.putText(img, f"{status.upper()} - metres withheld", (20, 42),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 3, cv2.LINE_AA)
     p_img = out_dir / "debug_selfcalib.png"
-    cv2.imwrite(str(p_img), img)
+    save_image(p_img, img)
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4), dpi=130)
     heights = res["heights_m"]
@@ -1065,7 +1066,7 @@ def _write_selfcalib_debug(res: dict, out_dir: Path) -> Path:
     a2.set_xlabel("глубина"); a2.set_ylabel("est_height_m"); a2.legend(fontsize=8)
     a2.set_title("Дрейф роста по глубине", fontsize=9)
     fig.tight_layout()
-    fig.savefig(out_dir / "debug_selfcalib_heights.png")
+    save_figure(fig, out_dir / "debug_selfcalib_heights.png")
     plt.close(fig)
     return p_img
 
@@ -1108,7 +1109,7 @@ def _write_ground_debug(res: dict, out_dir: Path) -> Path:
                     0.7, (60, 60, 255), 2, cv2.LINE_AA)
     p = out_dir / ("debug_stub_affine.png" if banner == "stub_affine"
                    else "debug_ground_rect.png")
-    cv2.imwrite(str(p), img)
+    save_image(p, img)
     return p
 
 

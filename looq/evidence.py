@@ -198,11 +198,17 @@ def _write_jpeg(path: Path, img_bgr: np.ndarray, quality: int) -> int:
 
     Вызывается ровно из одного места — EvidenceWriter.add(), сразу после
     blur_face_region(). Не вызывать откуда-либо ещё: это обходит обезличивание.
+
+    Кроп приходит уже размытым по ВЕРХНЕЙ ДОЛЕ, и этого мало. Замер
+    2026-09-06 по всем 668 кропам на диске: на 86 из них лицевые кейпоинты
+    остались в резких областях — голова не попала в долю, потому что человек
+    наклонён, перекрыт или срезан краем кропа. Поэтому запись идёт через
+    ``looq.anonymise``, который ищет голову детектором и позой, а долю
+    оставляет запасным путём. Импорт ленивый: anonymise берёт отсюда
+    blur_face_region, и на уровне модуля вышел бы цикл.
     """
-    ok, buf = cv2.imencode(".jpg", img_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
-    if not ok:
-        raise EvidenceError(f"cv2.imencode не смог закодировать кроп для {path}")
-    data = buf.tobytes()
+    from looq.anonymise import encode_image           # см. докстроку: цикл
+    data = encode_image(img_bgr, ".jpg", quality=int(quality))
     atomic_write_bytes(path, data)
     return len(data)
 

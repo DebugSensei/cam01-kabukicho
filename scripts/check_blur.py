@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from looq.io import atomic_write_bytes  # noqa: E402
+from looq.anonymise import save_image  # noqa: E402
 
 INDEX = Path("evidence/index.parquet")
 DEFAULT_OUT = Path("evidence/blur_check.jpg")
@@ -131,10 +131,10 @@ def main(argv=None) -> int:
         rows.append(np.hstack(chunk))
     sheet = np.vstack(rows)
 
-    ok, buf = cv2.imencode(".jpg", sheet, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-    if not ok:
-        raise SystemExit("не удалось закодировать контактный лист")
-    atomic_write_bytes(args.out, buf.tobytes())
+    # Лист собирается ИЗ обезличенных кропов, но сам он — новое изображение,
+    # и идёт тем же путём, что любое другое. Замер 2026-09-06: у 86 кропов из
+    # 668 фиксированная верхняя доля лицо не накрыла, и лист их наследовал.
+    save_image(args.out, sheet, quality=95)
 
     print(f"кропов на листе: {len(df)} из запрошенных {args.n}")
     print(f"claim_id: {sorted(df['claim_id'].unique())}")

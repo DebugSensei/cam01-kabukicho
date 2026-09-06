@@ -27,6 +27,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from looq.anonymise import save_image  # noqa: E402
 
 #: Размер ячейки и число колонок. Дефолт — крупно и в 12 колонок: лист для
 #: проверки глазами, а не для украшения. --compact ужимает его до размера,
@@ -142,7 +143,7 @@ def main(argv=None) -> int:
 
     sheet = np.vstack(parts)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(args.out), sheet, [cv2.IMWRITE_JPEG_QUALITY, args.quality])
+    save_image(args.out, sheet, quality=args.quality)
     print(f"\nлист: {args.out}  {sheet.shape[1]}x{sheet.shape[0]}, "
           f"{args.out.stat().st_size / 1e6:.1f} МБ")
     print("Смотрите глазами. Если узнаваемо хоть одно лицо — публиковать нельзя.")

@@ -41,6 +41,10 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.geometry import point_in_polygon_m  # noqa: E402
+from looq.anonymise import (ANON_CONF, ANON_MIN_BOX_H, FACE_KP,  # noqa: E402
+                            HEAD_PAD, KIND_HEAD, KIND_PERSON,
+                            _anonymise_with, _boxes_union,
+                            _head_boxes_from_pose, save_image)
 from looq.evidence import EvidenceError, blur_face_region  # noqa: E402
 from looq.io import load_config, read_json, require, write_json  # noqa: E402
 from looq.pilot import infer_params  # noqa: E402
@@ -62,16 +66,6 @@ JPEG_EVERY = 30            # каждый 30-й обработанный кад�
 BOX_MATCH_TOL_FRAC = 0.08
 BOX_MATCH_TOL_MIN_PX = 4.0     # для совсем мелких рамок доля вырождается
 PLAN_W = 430
-
-#: Порог детектора для ОБЕЗЛИЧИВАНИЯ. Намеренно много ниже боевого: цена
-#: лишнего размытия — размытый столб, цена пропуска — опубликованное лицо.
-#: Полнота здесь важнее точности, и это не тот компромисс, который стоит
-#: подкручивать ради красоты кадра.
-ANON_CONF = 0.05
-
-#: Ниже этой высоты рамки полоса головы вырождается: при top_frac 0.3 у рамки
-#: в 20 px это 6 px, меньше min_kernel_px из конфига.
-ANON_MIN_BOX_H = 20
 
 EVIDENCE_CONFIG = "configs/evidence.yaml"
 
@@ -130,108 +124,18 @@ def load_anonymiser(detect_cfg: dict):
     return (YOLO(weights), YOLO(str(pose_w))), priv
 
 
-#: Кейпоинты лица в COCO: нос, глаза, уши.
-FACE_KP = (0, 1, 2, 3, 4)
-
-#: Насколько раздуть рамку вокруг найденных кейпоинтов лица, в долях от её
-#: собственного размера. Кейпоинты отмечают точки, а закрыть надо всю голову:
-#: волосы, подбородок, уши по краям.
-HEAD_PAD = 0.9
-
-
-def _head_boxes_from_pose(res) -> list[tuple[float, float, float, float]]:
-    """Рамки вокруг найденных кейпоинтов лица.
-
-    Полоса в верхних 30% рамки человека — приближение, и оно ломается на
-    наклонённой голове: замер на кадре f060369 показал лицо, у которого нос
-    внутри полосы, а подбородок под её краем, с резкой границей ровно по
-    лицу. Кейпоинты говорят, где голова НА САМОМ ДЕЛЕ, и размывать надо там.
-    """
-    if res.keypoints is None or res.keypoints.conf is None:
-        return []
-    xy = np.asarray(res.keypoints.xy.cpu())
-    cf = np.asarray(res.keypoints.conf.cpu())
-    out = []
-    for pi in range(cf.shape[0]):
-        pts = [xy[pi, j] for j in FACE_KP if cf[pi, j] >= 0.20]
-        if not pts:
-            continue
-        pts = np.asarray(pts, dtype=np.float64)
-        x0, y0 = pts[:, 0].min(), pts[:, 1].min()
-        x1, y1 = pts[:, 0].max(), pts[:, 1].max()
-        # у профиля видны один глаз и ухо: рамка вырождается в точку, и
-        # раздувать её от нулевого размера нечего. Берём запас от роста.
-        span = max(x1 - x0, y1 - y0, 12.0)
-        pad = span * HEAD_PAD
-        out.append((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
-    return out
-
-
-#: Как размывать рамку. Помечается ЯВНО при сборе, а не угадывается потом по
-#: пропорции: прежняя версия считала головой всё, что не вытянуто вертикально
-#: сильнее 1.7. Работало это только потому, что HEAD_PAD = 0.9 держал рамку
-#: головы на 1.556 — запас 0.14. Уменьшить отступ до 0.6, и голова стала бы
-#: «человеком»: размылась бы её верхняя треть, а лицо осталось. Молча.
-KIND_PERSON, KIND_HEAD = "person", "head"
-
-
-def _boxes_union(models, frame, params: dict) -> list[tuple[np.ndarray, str]]:
-    """Что размывать на кадре: (рамка, вид).
-
-    Рамка человека добавляется ВСЕГДА, независимо от того, нашлись ли у него
-    кейпоинты головы. Рамки голов идут СВЕРХ, а не вместо: если поза не
-    сработала — перекрытый человек, спина, край кадра, — остаётся полоса, и
-    человек не уходит незакрытым.
-
-    Дубликаты не убираются: размыть одну голову дважды безвредно, а выкидывать
-    пересечения значило бы рисковать ради экономии, которой здесь нет.
-    """
-    out: list[tuple[np.ndarray, str]] = []
-    for m in models:
-        r = m.predict(frame, imgsz=params.get("imgsz", 1280), conf=ANON_CONF,
-                      device=params.get("device", "cpu"),
-                      half=bool(params.get("half", False)),
-                      classes=[0], verbose=False)[0]
-        if r.boxes is not None and len(r.boxes):
-            for b in np.asarray(r.boxes.xyxy.cpu(), dtype=np.float64):
-                out.append((b, KIND_PERSON))
-        for hb in _head_boxes_from_pose(r):
-            out.append((np.asarray(hb, dtype=np.float64), KIND_HEAD))
-    return out
-
-
 def anonymise_frame(frame, model, params: dict, priv: dict) -> tuple[int, int]:
     """Размывает голову каждому найденному человеку. Правит кадр на месте.
+
+    Обёртка над looq.anonymise: рендер уже держит загруженные модели и не
+    должен грузить их второй раз. Сама реализация — одна на проект, потому
+    что две копии расходятся: правишь одну, забываешь вторую, и это ровно
+    тот дефект, ради которого модуль появился.
 
     Вызывается ДО отрисовки боксов и стрелок: иначе размытие затёрло бы
     разметку, а не лицо. Возвращает (размыто, отброшено).
     """
-    models = model if isinstance(model, (tuple, list)) else (model,)
-    done = skipped = 0
-    for box, kind in _boxes_union(models, frame, params):
-        x1, y1, x2, y2 = [int(round(v)) for v in box]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
-        if x2 - x1 < 4 or y2 - y1 < ANON_MIN_BOX_H:
-            skipped += 1
-            continue
-        # У рамки головы размывается ВСЯ площадь: она и есть голова, брать
-        # долю внутри неё неоткуда. У рамки человека — верхняя доля из
-        # конфига, и это запасной путь для тех, у кого позу не нашли.
-        top = 1.0 if kind == KIND_HEAD else float(priv["face_blur_top_frac"])
-        try:
-            blurred, _ = blur_face_region(
-                frame[y1:y2, x1:x2].copy(),
-                top_frac=top,
-                kernel_frac=float(priv["blur_kernel_frac"]),
-                sigma_frac=float(priv["blur_sigma_frac"]),
-                pixelate_factor=int(priv["pixelate_factor"]))
-        except EvidenceError:
-            skipped += 1          # область уже однородна, лица там нет
-            continue
-        frame[y1:y2, x1:x2] = blurred
-        done += 1
-    return done, skipped
+    return _anonymise_with(frame, model, priv, int(params.get("imgsz", 1280)))
 
 
 def open_encoder(path: Path, size: tuple[int, int], fps: float):
@@ -609,8 +513,10 @@ def main(argv=None) -> int:
         enc.stdin.write(frame.tobytes())
         if written % JPEG_EVERY == 0:
             fresh.add(f"f{idx:06d}.jpg")
-            cv2.imwrite(str(args.frame_dir / f"f{idx:06d}.jpg"), frame,
-                        [cv2.IMWRITE_JPEG_QUALITY, 88])
+            # Кадр уже обезличен выше по циклу; save_image прогонит
+            # детектор второй раз и ничего не найдёт. Второй проход дешевле,
+            # чем вторая точка записи, которую можно позвать в обход.
+            save_image(args.frame_dir / f"f{idx:06d}.jpg", frame, quality=88)
         written += 1
         if written % 200 == 0:
             print(f"  кадров записано {written}/{len(frames)}")

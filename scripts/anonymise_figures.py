@@ -1,10 +1,10 @@
 """Обезличивание людей на картинках README — детектором, а не на глаз.
 
-ЗАЧЕМ. README утверждает, что в репозитории нет изображений лиц. Три
-фигуры — опорный кадр с горизонтом, кадр оверлея и кадр с зонами — это
-уличные сцены с прохожими, и утверждение было верно «по духу», но не
-буквально: кадры перепубликуют уже публичный поток, однако лица на них
-различимы.
+ЗАЧЕМ. README утверждает, что в репозитории нет изображений лиц. Четыре
+фигуры — опорный кадр с горизонтом, кадр оверлея, кадр с зонами и снимок
+дашборда с 48 вшитыми кропами — это уличные сцены с прохожими, и
+утверждение было верно «по духу», но не буквально: кадры перепубликуют уже
+публичный поток, однако лица на них различимы.
 
 КАК. Детектор находит людей, и к верхней части каждой рамки применяется та
 же функция, что и к пруф-кропам, — `looq.evidence.blur_face_region`:
@@ -31,16 +31,25 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from looq.evidence import EvidenceError, blur_face_region  # noqa: E402
+from looq.anonymise import save_image  # noqa: E402
 from looq.io import load_config  # noqa: E402
 from looq.pilot import infer_params  # noqa: E402
 
-#: Фигуры-фотографии. Графики (гистограммы, скаттеры, план) людей не содержат,
-#: и гонять по ним детектор незачем.
-PHOTO_FIGURES = [
-    "docs/img/calib_vanishing.webp",
-    "docs/img/overlay_frame.webp",
-    "docs/img/zones_reference.webp",
-]
+#: ВСЕ фигуры в docs/img, а не только «фотографические».
+#: Прежний список содержал три файла из семи: графики людей не содержат, и
+#: гонять по ним детектор казалось лишним. Именно такое исключение — по типу
+#: картинки, на глаз — и есть лазейка, которую закрывает looq/anonymise.py:
+#: «это же просто график» звучит одинаково убедительно и когда правда, и
+#: когда в фигуру вставлен кадр. Замер: проход по фигуре без людей стоит
+#: 0.13 с и возвращает ноль рамок. Список строится из каталога, чтобы новая
+#: фигура попадала в него сама, а не когда о ней вспомнят.
+FIGURES_DIR = Path("docs/img")
+FIGURE_SUFFIXES = (".webp", ".jpg", ".jpeg", ".png")
+
+
+def all_figures() -> list[str]:
+    return [p.as_posix() for p in sorted(FIGURES_DIR.glob("*"))
+            if p.suffix.lower() in FIGURE_SUFFIXES]
 
 EVIDENCE_CONFIG = "configs/evidence.yaml"
 DETECT_CONFIG = "configs/s3_detect.yaml"
@@ -107,7 +116,7 @@ def anonymise(path: Path, model, params: dict, priv: dict) -> tuple[int, int, in
         n += 1
 
     # webp пишется тем же качеством, что и в make_readme_figures
-    cv2.imwrite(str(path), img, [cv2.IMWRITE_WEBP_QUALITY, 80])
+    save_image(path, img, quality=80)
     return n, tiny, flat
 
 
@@ -115,14 +124,15 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("figures", nargs="*", type=Path)
-    ap.add_argument("--all", action="store_true", help="все фотографические фигуры")
+    ap.add_argument("--all", action="store_true",
+                    help="все фигуры в docs/img, включая графики")
     ap.add_argument("--conf", type=float, default=0.05,
                     help="порог детектора. НАМЕРЕННО НИЖЕ боевого: цена лишнего "
                          "размытия — размытый столб, цена пропуска — опубликованное "
                          "лицо. Для обезличивания важна полнота, не точность")
     args = ap.parse_args(argv)
 
-    targets = [Path(q) for q in PHOTO_FIGURES] if args.all else list(args.figures)
+    targets = [Path(q) for q in all_figures()] if args.all else list(args.figures)
     if not targets:
         raise SystemExit("нечего обезличивать: укажите файлы или --all")
 

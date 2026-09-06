@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
+from looq.anonymise import encode_image
 from looq.geometry import ORIENTATION_DISCLAIMER
 from looq.evidence import EvidenceError, blur_face_region
 from looq.io import ConfigError, RunManifest, atomic_write_text, load_config, read_json, require
@@ -199,10 +200,11 @@ def _contact_sheet(index_path: Path, claim_id: str, max_n: int,
             chunk.append(np.full_like(cells[0], 27))
         rows.append(np.hstack(chunk))
     sheet = np.vstack(rows)
-    ok, buf = cv2.imencode(".jpg", sheet, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
-    if not ok:
-        return None
-    return base64.b64encode(buf.tobytes()).decode("ascii")
+    # Кропы на листе уже обезличены своей стадией, но собранный лист — это
+    # НОВОЕ изображение, и оно обязано пройти тот же путь, что любое другое.
+    # Замер 2026-09-06: фиксированная верхняя доля оставляла лица на кропах,
+    # где голова в эту долю не попала, и лист наследовал их.
+    return base64.b64encode(encode_image(sheet, ".jpg", quality=82)).decode("ascii")
 
 
 def run(cfg: dict[str, Any], manifest: RunManifest) -> str:

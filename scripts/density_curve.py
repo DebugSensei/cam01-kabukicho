@@ -30,6 +30,7 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from looq.anonymise import save_figure  # noqa: E402
 from looq.io import library_versions, sha256_file, utc_now_iso, write_json  # noqa: E402
 
 OUT_CSV = Path("out/density.csv")
@@ -198,7 +199,7 @@ def _plot(rows: list[dict], best: dict | None, args) -> None:
     ax.grid(alpha=0.25, lw=0.5)
     fig.tight_layout()
     OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_PNG)
+    save_figure(fig, OUT_PNG)
     plt.close(fig)
 
 
