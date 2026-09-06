@@ -1475,6 +1475,25 @@ Three tests in `tests/test_single_image_write.py`:
   weights, because a gate that cannot run stops being run and stops
   protecting.
 
+Both prohibitions were mutation-tested rather than assumed. Appending a
+`cv2.imwrite` to `scripts/make_figures.py` fails the first with the file and
+line; calling `_install_models_for_tests` from `scripts/make_dashboard.py`
+fails the second the same way. A gate nobody has tried to break is a comment.
+
+**The cost of routing `looq.evidence` through the detector, stated.** Crop
+writing now needs the model weights, and on a clean clone there are none, so
+twelve evidence tests that write synthetic noise crops stopped being able to
+run at all. `tests/conftest.py` installs a stub that honestly finds nothing —
+their crops contain no people — and only when the weights are genuinely
+absent; with weights present the real models run. The stub is a seam, and a
+seam is a liability, so calling it from `looq/`, `scripts/` or `verify/` is
+itself a test failure. The alternative was to leave `evidence.py` on the fixed
+band and delete this machinery, at the price of leaving 86 of 668 crops on
+disk with a visible face while rule 9 says crops of faces are not written to
+disk. The published surface is clean either way, because the pages
+re-anonymise every crop through the detector as they embed it; what the
+detector pass at write time buys is the local files.
+
 ### 14.6. What was not done, and why
 
 The crops on disk under `evidence/` are not regenerated. Doing so means

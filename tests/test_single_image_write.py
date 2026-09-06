@@ -130,6 +130,26 @@ def test_anonymise_has_no_off_switch():
                            "no_blur", "anonymize")]
         assert not banned, f"{name}{sig}: параметр-выключатель {banned}"
 
+    # Шов для тестов не должен звучать из рабочего кода: подменить модель на
+    # ту, что ничего не находит, — это и есть обход, только длиннее.
+    # _anonymise_with разрешён render_overlay: он передаёт НАСТОЯЩИЕ модели,
+    # уже загруженные им для рендера, и второй раз грузить их незачем.
+    ALLOWED = {"_anonymise_with": {"scripts/render_overlay.py"}}
+    leaks: list[str] = []
+    for f in _py_files():
+        if _rel(f) == GATEKEEPER:
+            continue
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            nm = (node.func.id if isinstance(node.func, ast.Name)
+                  else node.func.attr if isinstance(node.func, ast.Attribute)
+                  else None)
+            if nm in ("_install_models_for_tests", "_anonymise_with") \
+                    and _rel(f) not in ALLOWED.get(nm, set()):
+                leaks.append(f"{_rel(f)}:{node.lineno} {nm}")
+    assert not leaks, f"внутренняя дверь обезличивателя вызвана из кода: {leaks}"
+
     src = (ROOT / GATEKEEPER).read_text(encoding="utf-8")
     tree = ast.parse(src)
     fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
