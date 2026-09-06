@@ -1033,7 +1033,7 @@ lies at segment boundaries, and the sample would drift. Slower, but the timestam
 | S3 detect | 1978.5 s, **18.2 frames/s** | 36 000 of 108 000 frames, **556 987 detections**, 129 918 dropped by the 70 px cutoff |
 | S4 track | 430.1 s | **3 359 tracks**, 481 751 rows, 100 % indirect foot points |
 | S5 pose+orient | 1598.3 s | 238 895 pose persons, 221 788 matched; body coverage 45.6 %, head 22.4 %, ankles 37.6 % |
-| S6 attn | — | 9 610 events |
+| S6 attn | — | 10 043 events |
 | S7 attrs | — | coverage 48.2 % |
 
 All in fp16 on an RTX 4070 Laptop, 8187 MiB VRAM. The stage **fails if CUDA is
@@ -1219,7 +1219,7 @@ before publication.
 
 ### 12.1. Decision
 
-Two pages are published: `dashboard.html` and `benchmark.html`. The evidence-crop
+Two result pages are published: `dashboard.html` and `benchmark.html`, plus `index.html` at the site root, which is a redirect to the dashboard so the address is not a directory listing. The evidence-crop
 set is cut to **12 frames per storefront, 48 in all**, selected stratified by
 confidence — the same selection as locally.
 

@@ -5,7 +5,7 @@ Street-level attention analytics from a single fixed camera.
 ![Python 3.10](https://img.shields.io/badge/python-3.10-3776ab)
 ![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76b900)
 ![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![tests 113](https://img.shields.io/badge/tests-113-2ea44f)
+![tests 116](https://img.shields.io/badge/tests-116-2ea44f)
 
 ![Dashboard](docs/img/dashboard.webp)
 
@@ -13,8 +13,9 @@ Street-level attention analytics from a single fixed camera.
 
 The published dashboard carries a reduced evidence set — twelve frames per storefront,
 forty-eight in all, stratified by confidence exactly as the full build is. **The complete
-archive of 394 crops is deliberately not published**: blurring a face does not make a crop
-non-personal, and a public indexed URL is a different order of exposure from a local file.
+archive — 668 crop files, 257 of them indexed — is deliberately not published**: blurring
+a face does not make a crop non-personal, and a public indexed URL is a different order of
+exposure from a local file.
 The reasoning is in [`docs/DECISIONS.md`](docs/DECISIONS.md) §12. The full archive, the
 replay page and the overlay video are all available from a local run.
 
@@ -24,8 +25,10 @@ replay page and the overlay video are all available from a local run.
 
 An offline pipeline that turns one **already recorded** hour of a public street
 camera into
-per-storefront attention metrics, with a confidence interval on every rate and,
-for every claim that carries frames, a grid of the actual anonymised frames behind it.
+per-storefront attention metrics — a 95 % Wilson interval on each of the eight rates,
+resampled by track rather than by frame, and for every claim that carries frames, a grid
+of the actual anonymised frames behind it. The other fourteen of the twenty-two metrics
+are counts and medians and carry no interval; `out/metrics.json` says which is which.
 
 ---
 
@@ -276,8 +279,9 @@ it exactly.
 **That number was wrong until this was written, and the gate did not catch it.**
 `calib/homography.json` stores `height_depth_slope` as −0.0163, which is the true value
 multiplied by `scale_rescale_factor` = 0.8714 — but a slope in m/m is invariant when
-heights and depths are rescaled by the same factor, so the multiplication at
-`looq/stages/s1_calib.py:208` was simply wrong. The tell was internal: the stored grade
+heights and depths are rescaled by the same factor, so the multiplication that used to
+sit in that rescale block was simply wrong. It is gone, and
+`looq/stages/s1_calib.py:211` is the comment that records why. The tell was internal: the stored grade
 of 4.9 % follows from −0.0188 and not from −0.0163. The gate recomputed the slope from
 the artifact's own arrays and then silently preferred its own answer instead of
 comparing the two; `verify/verify_s1.py` now compares them and fails on a mismatch. The
@@ -368,7 +372,7 @@ and — because one file holds two matrices and a sha match is not enough — it
 compares the spatial span of zones against the span of tracks and fails if the ratio
 leaves [0.05, 20].
 
-**The mirrored plan** (`scripts/render_overlay.py:122`). `PlanView._swap` returned `p[:, ::-1]`. Swapping two
+**The mirrored plan** (`scripts/render_overlay.py:183`). `PlanView._swap` returned `p[:, ::-1]`. Swapping two
 columns is a transposition — a reflection with determinant −1 — not the intended 90°
 rotation. Storefronts were drawn to the right of the road; in the camera they are on the
 left. The homography was exonerated numerically before the drawing code was touched: the
@@ -411,21 +415,25 @@ denominator, **39 %** of counted events rested on fewer than 10 in-window frames
 so its 9.5 % was a one-in-three ratio. A share threshold stops meaning anything once the
 denominator drops below `1 / threshold`, because a single frame already clears it — which
 is exactly what the threshold exists to prevent. Events below that bound are now marked
-`low_confidence`: kept in the data, out of the aggregate. 313 events, and the headline
-settles at **514**.
+`low_confidence`: kept in the data, out of the aggregate — **313** of them for this
+reason. That flag has other causes too, chiefly the grazing-angle guard, and **4 167 of
+the 10 043 events carry it in total**. The headline settles at **514** turned tracks.
 
-**Every speed in the pipeline was three times too low** (`looq/stages/s4_track.py:164`).
+**Every speed in the pipeline was three times too low** (`looq/stages/s4_track.py:165`).
 The sliding least-squares fit took frame indices and divided them by the rate of
 *processed* frames. With `frame_stride: 3` consecutive processed frames are 3 apart in
 index but 0.1 s apart in time, so the fit used dt = 0.3 s where the truth was 0.1 s. The
 median pedestrian speed read 0.30 m/s instead of **0.89 m/s**, and the
 `max_plausible_mps: 4.0` guard — whose entire job is to null out bad ground-plane
 projections — had never once fired, because nothing could reach 4 m/s when everything was
-divided by three. It now nulls 5.8 % of rows. A regression test pins the invariant:
+divided by three. It now fires: the guard alone nulls **0.46 %** of rows — 2 192 of
+481 751 — and the total null share is 5.79 %, of which 5.33 % is the window edges, where a
+sliding fit has no data rather than an implausible answer. A regression test pins the
+invariant:
 the same motion sampled densely and every third frame must give the same speed.
 
 **The calibration could not be reproduced, and nothing said so**
-(`looq/stages/s1_calib.py:308`). S1 takes its reference frame and its pose
+(`looq/stages/s1_calib.py:309`). S1 takes its reference frame and its pose
 keypoints from the clip named in its config, but its pedestrian sample from
 whatever `det/frames.parquet` currently holds — and S3 overwrites that file on
 every run. The calibration in use was computed when it held the three-minute
@@ -454,7 +462,7 @@ of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS slo
 the whole burst.
 
 **Unblurred faces were published, because anonymisation was a step and not a
-path** (`scripts/make_dashboard.py:928`). The signature read
+path** (`scripts/make_dashboard.py:934`). The signature read
 `b64_img(path, max_w=None, quality=92, anonymise: bool = False)`. Two call sites in the
 same file: the evidence grid passed `anonymise=True`, the figure block did not and took
 the default. The page it builds is one of the two published to GitHub Pages.
@@ -504,8 +512,10 @@ rewritten and the missing contract was written.
 
 The second read every capability sentence in this README against the code that must
 implement it. **Fifteen** did not hold. Two are worth naming. "Every stage has a gate"
-was false: **two of the ten gates compute a metric**, the other eight name the metric
-they cannot compute and return 1 — honest in the terminal, not honest here. And "zone
+was false: **two of the ten gates compute a metric**, three more run one real check
+without computing their metric, and the remaining five only read the artifact status —
+the split set out under [Architecture](#architecture). All ten return 1 today: honest in
+the terminal, not honest in a sentence that says every stage has a gate. And "zone
 entry: tracks whose ground position enters a storefront's apron polygon" described a
 metric that does not exist: `visitors_*` counts tracks that came within 8 m of the
 facade, and the two quantities **differ by a factor of thirty**. The rest were of the
@@ -560,11 +570,11 @@ to walk through which function computed which number to reach it.
 ```bash
 pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128   # not in requirements.txt
 pip install -r requirements.txt
-python -m pytest tests/ -o addopts="" -q     # 109 passed, 4 skipped on a fresh clone
+python -m pytest tests/ -o addopts="" -q     # 112 passed, 4 skipped on a fresh clone
 make serve                                    # http://localhost:8080, serves out/
 ```
 
-113 tests are collected; four of them need artifacts a fresh clone does not have and
+116 tests are collected; four of them need artifacts a fresh clone does not have and
 skip. Two check that every row of the evidence index points at a file that exists and is
 the anonymised one; the other two measure anonymisation on real pixels and need the model
 weights — one on a frame of the source recording, one over every image in the repository
