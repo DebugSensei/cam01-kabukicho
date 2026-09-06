@@ -37,7 +37,7 @@ ANCHORS = {
     "looq/stages/s6_attn.py:168": "Единицы зон и треков обязаны совпадать",
     "looq/stages/s6_attn.py:290": "делилось на ВСЕ кадры трека",
     "scripts/make_replay.py:549": "hits_by_frame",
-    "scripts/make_dashboard.py:934": "def b64_img",
+    "scripts/make_dashboard.py:943": "def b64_img",
     "scripts/render_overlay.py:183": "def _swap",
 }
 

@@ -462,7 +462,7 @@ of 1.30 m/s, neighbour differencing returned **6.5 m/s**. Replaced by an OLS slo
 the whole burst.
 
 **Unblurred faces were published, because anonymisation was a step and not a
-path** (`scripts/make_dashboard.py:934`). The signature read
+path** (`scripts/make_dashboard.py:943`). The signature read
 `b64_img(path, max_w=None, quality=92, anonymise: bool = False)`. Two call sites in the
 same file: the evidence grid passed `anonymise=True`, the figure block did not and took
 the default. The page it builds is one of the two published to GitHub Pages.

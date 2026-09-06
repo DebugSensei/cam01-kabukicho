@@ -287,12 +287,21 @@ I18N = {
                         "処理済み1時間のうち3分。保存済みアーティファクトから描画。"
                         "枠には追跡ID・服の色・滞在時間、矢印は体または頭の向きで"
                         "視線ではありません。"),
-    "sec.vid.note":    ("The video is hosted on YouTube: a 98 MB file has no place "
-                        "in a source repository.",
-                        "Видео лежит на YouTube: файлу в 98 МБ не место в "
-                        "репозитории исходников.",
-                        "動画はYouTube上にあります。98MBのファイルをソース"
-                        "リポジトリに置くべきではありません。"),
+    # Размер сверен с файлом: out/overlay.mp4 = 88 999 115 байт. И главное —
+    # ЭТА запись не обезличена, в отличие от всего остального на странице.
+    # Читатель, которому страница обещает обезличивание, обязан узнать про
+    # исключение здесь, а не в DECISIONS §13.5.
+    "sec.vid.note":    ("Hosted on YouTube: an 89 MB file has no place in a source "
+                        "repository. This recording is the earlier render and is "
+                        "NOT anonymised, unlike every image on this page; it is "
+                        "kept for one demonstration and then removed.",
+                        "Лежит на YouTube: файлу в 89 МБ не место в репозитории "
+                        "исходников. Эта запись — ранний рендер и НЕ обезличена, "
+                        "в отличие от всех изображений на этой странице; она "
+                        "оставлена на один показ и затем снимается.",
+                        "動画はYouTube上にあります（89MB）。この記録は初期の"
+                        "レンダリングで、本ページの画像と異なり匿名化されて"
+                        "いません。一度の実演のために残し、その後削除します。"),
     "sec.zones.eyebrow": ("Per storefront", "По витринам", "店舗別"),
     "sec.zones.title":   ("Attention by storefront", "Внимание по витринам",
                           "店舗別の注目度"),
