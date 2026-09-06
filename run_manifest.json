@@ -1,0 +1,1413 @@
+{
+  "schema_version": "1",
+  "stages": {
+    "s0_ingest": {
+      "stage": "s0_ingest",
+      "schema_version": "1",
+      "started_at": "2026-09-05T11:44:11.773+00:00",
+      "finished_at": "2026-09-05T11:44:14.381+00:00",
+      "status": "not_implemented",
+      "config_path": "configs\\s0_ingest.yaml",
+      "config_sha256": "dd054d6ee85330fb4bb35b00a26e136e65933dd8485d0e96491af7598e1f61c8",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "1c45e7922ee548aec67ea47b66b697997dd686fb",
+      "git_dirty": false,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.ingest.frame_sample",
+          "claim.ingest.segment_boundary"
+        ],
+        "output_artifacts": [
+          "raw\\manifest.json"
+        ],
+        "output_rows": 0,
+        "output_status": "skeleton"
+      }
+    },
+    "s1_calib": {
+      "stage": "s1_calib",
+      "schema_version": "1",
+      "started_at": "2026-09-05T11:10:57.197+00:00",
+      "finished_at": "2026-09-05T11:11:43.058+00:00",
+      "status": "ok",
+      "config_path": "C:\\Users\\IVANPO~1\\AppData\\Local\\Temp\\claude\\C--projects-japan-computer-vision\\50a6f2ef-b857-488c-b9e8-545c2fbdacc1\\scratchpad\\s1dry\\s1_dry.yaml",
+      "config_sha256": "8b87dbbdd65ea265c43c282d131027554b050c6870dd50226e129863c7d8d06f",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "018203e8677316a08e51b8296a0d928572a64e8b",
+      "git_dirty": false,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.calib.holdout_reprojection",
+          "claim.calib.scale_check"
+        ],
+        "focal_px": 947.3153775856662,
+        "street_width_L1L3_implied_m": 5.117204777776993,
+        "street_grade_percent": 3.7530759475247804,
+        "scale_m_per_unit": 5.043792540315999,
+        "height_median_m": 1.9895236642108203,
+        "calib_status": "scale_from_height",
+        "scale_rescale_factor": 0.8444232306562695,
+        "output_artifact": "C:\\Users\\IVANPO~1\\AppData\\Local\\Temp\\claude\\C--projects-japan-computer-vision\\50a6f2ef-b857-488c-b9e8-545c2fbdacc1\\scratchpad\\s1dry\\homography.after.json",
+        "debug_artifacts": [
+          "calib\\debug_selfcalib.png"
+        ]
+      }
+    },
+    "s2_zones": {
+      "stage": "s2_zones",
+      "schema_version": "1",
+      "started_at": "2026-09-06T00:35:03.900+00:00",
+      "finished_at": "2026-09-06T00:35:10.824+00:00",
+      "status": "ok",
+      "config_path": "configs\\s2_zones.yaml",
+      "config_sha256": "d83331e52d442a103b5f7f4a644f4f7f92f7da26cfa360e6b7ef740100a9bac7",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "12661be8909a9bfed0e5c658ab399b40035554ce",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "n_features": 9,
+        "scale_known": true,
+        "output_artifact": "zones/zones.geojson"
+      }
+    },
+    "s3_detect": {
+      "stage": "s3_detect",
+      "schema_version": "1",
+      "started_at": "2026-09-04T08:27:14.110+00:00",
+      "finished_at": "2026-09-04T09:00:16.639+00:00",
+      "status": "ok",
+      "config_path": "configs\\s3_detect.yaml",
+      "config_sha256": "1b5302d598c8d4845448738db23cc1c49493581cf8f27772cc28219f759ed3fc",
+      "model": {
+        "weights": "models/yolo11m.pt",
+        "weights_sha256": "d5ffc1a674953a08e11a8d21e022781b1b23a19b730afc309290bd9fb5305b95",
+        "weights_present": true,
+        "imgsz": 1280,
+        "device": "cuda:0",
+        "precision": "fp16",
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "c344532d845d4837d18d0c945f5c6431f638b2e2",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.detect.borderline",
+          "claim.detect.far_half",
+          "claim.detect.near_half"
+        ],
+        "min_box_height_px": 70.0,
+        "n_detections_dropped_small": 129918,
+        "elapsed_s": 1978.5,
+        "frames_processed": 36000,
+        "throughput_fps": 18.2,
+        "n_detections": 556987,
+        "processed_frac": 0.3333,
+        "evidence_index": "evidence\\index.parquet",
+        "evidence_sampling_stats": {
+          "claim.detect.borderline": {
+            "n_offered": 43825,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 41825,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.26123046875,
+                "conf_max": 0.2822265625
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.29248046875,
+                "conf_max": 0.329345703125
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.33203125,
+                "conf_max": 0.359375
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.detect.far_half": {
+            "n_offered": 95043,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 93043,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.26220703125,
+                "conf_max": 0.4697265625
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.5166015625,
+                "conf_max": 0.5830078125
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.650390625,
+                "conf_max": 0.71875
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.detect.near_half": {
+            "n_offered": 461944,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 459944,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.391357421875,
+                "conf_max": 0.7001953125
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.76953125,
+                "conf_max": 0.83837890625
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.86572265625,
+                "conf_max": 0.90380859375
+              }
+            ],
+            "seed": 20260903
+          }
+        },
+        "output_artifacts": [
+          "det/frames.parquet",
+          "det/frames_index.parquet"
+        ]
+      }
+    },
+    "s4_track": {
+      "stage": "s4_track",
+      "schema_version": "1",
+      "started_at": "2026-09-05T10:55:54.006+00:00",
+      "finished_at": "2026-09-05T10:58:44.017+00:00",
+      "status": "ok",
+      "config_path": "configs\\s4_track.yaml",
+      "config_sha256": "ee2ea2cf20382a721276d605f6fb36ec5318b6ad3fa6a1c5b1c1bec43ca6737a",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": "cuda:0",
+        "precision": "fp16",
+        "tracker": "bytetrack",
+        "tracker_version": null
+      },
+      "git_sha": "ee7526cebcd3209b63a2ce2b7de64357a5b5a6b0",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.track.foot_source_indirect",
+          "claim.track.id_switch_suspect",
+          "claim.track.speed_outlier"
+        ],
+        "n_tracks": 3359,
+        "n_track_frames": 481751,
+        "indirect_foot_share": 1.0,
+        "n_gp_invalid": 0,
+        "scale_known": true,
+        "elapsed_s": 160.9,
+        "evidence_index": "evidence\\index.parquet",
+        "evidence_sampling_stats": {
+          "claim.track.foot_source_indirect": {
+            "n_offered": 522,
+            "n_retained": 522,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.52734375,
+                "conf_max": 0.6533203125
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.76123046875,
+                "conf_max": 0.826171875
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.86376953125,
+                "conf_max": 0.9169921875
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.track.id_switch_suspect": {
+            "n_offered": 522,
+            "n_retained": 522,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.361083984375,
+                "conf_max": 0.72314453125
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.7255859375,
+                "conf_max": 0.798828125
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 174,
+                "conf_min": 0.859375,
+                "conf_max": 0.87548828125
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.track.speed_outlier": {
+            "n_offered": 48,
+            "n_retained": 48,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 16,
+                "conf_min": 0.415771484375,
+                "conf_max": 0.60205078125
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 16,
+                "conf_min": 0.66259765625,
+                "conf_max": 0.76416015625
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 16,
+                "conf_min": 0.79638671875,
+                "conf_max": 0.86279296875
+              }
+            ],
+            "seed": 20260903
+          }
+        },
+        "output_artifact": "track/tracks.parquet"
+      }
+    },
+    "s5_orient": {
+      "stage": "s5_orient",
+      "schema_version": "1",
+      "started_at": "2026-09-04T09:07:37.818+00:00",
+      "finished_at": "2026-09-04T09:34:21.344+00:00",
+      "status": "ok",
+      "config_path": "configs\\s5_orient.yaml",
+      "config_sha256": "9b2f52a61051e5c27b81f47afdd02654351633af8df0b238822c61f8b3422888",
+      "model": {
+        "weights": "models/yolo11m-pose.pt",
+        "weights_sha256": "29b17eaf3a3117cbea906090dbedf9159f7c6a49db58ec8b99ed2dfde1cf6eb2",
+        "weights_present": true,
+        "imgsz": 960,
+        "device": "cuda:0",
+        "precision": "fp16",
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "64939ed4e6aca2018a1b1af3e31eeda1cc592ffe",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.orient.body_yaw",
+          "claim.orient.low_conf",
+          "claim.orient.missing"
+        ],
+        "elapsed_s": 1598.3,
+        "pose_stats": {
+          "pose_persons": 238895,
+          "matched": 221788,
+          "unmatched": 259152,
+          "body_ok": 219450,
+          "head_ok": 107651,
+          "ankle_ok": 180754,
+          "too_small": 21,
+          "few_kpts": 373
+        },
+        "body_yaw_coverage": 0.4563,
+        "head_yaw_coverage": 0.2238,
+        "foot_refined_coverage": 0.3758,
+        "scale_known": true,
+        "evidence_index": "evidence\\index.parquet",
+        "evidence_sampling_stats": {
+          "claim.orient.body_yaw": {
+            "n_offered": 219450,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 217450,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.8623046875,
+                "conf_max": 0.943359375
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.98095703125,
+                "conf_max": 0.98974609375
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.99072265625,
+                "conf_max": 0.9970703125
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.orient.low_conf": {
+            "n_offered": 2580,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 580,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.320068359375,
+                "conf_max": 0.376708984375
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.382568359375,
+                "conf_max": 0.405029296875
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.4658203125,
+                "conf_max": 0.4990234375
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.orient.missing": {
+            "n_offered": 2338,
+            "n_retained": 2000,
+            "n_dropped_by_reservoir": 338,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.0,
+                "conf_max": 0.0
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 666,
+                "conf_min": 0.0,
+                "conf_max": 0.0
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 667,
+                "conf_min": 0.0,
+                "conf_max": 0.0
+              }
+            ],
+            "seed": 20260903
+          }
+        },
+        "output_artifact": "pose/orient.parquet"
+      }
+    },
+    "s6_attn": {
+      "stage": "s6_attn",
+      "schema_version": "1",
+      "started_at": "2026-09-05T11:05:43.432+00:00",
+      "finished_at": "2026-09-05T11:06:21.189+00:00",
+      "status": "ok",
+      "config_path": "configs\\s6_attn.yaml",
+      "config_sha256": "dc4e3c07cfd64a7f804f1494d6d15711ee490f851301ee403dd223c6b0b1c267",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "f64b03879841b2857fb2c723ac860e6a04e3d0f3",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.attn.false_positive",
+          "claim.attn.stop_and_orient",
+          "claim.attn.stop_only"
+        ],
+        "events_by_type": {
+          "stop": 6,
+          "gaze": 1611,
+          "stop_and_gaze": 1,
+          "pass_by": 8425,
+          "low_conf": 4167,
+          "thin_window": 313
+        },
+        "median_speed": 0.8878346085548401,
+        "stop_threshold": 0.22195865213871002,
+        "stop_mode": "relative",
+        "refined_foot_share": 0.3752,
+        "scale_known": true,
+        "output_artifacts": [
+          "attn/events.parquet",
+          "attn/track_zone_frames.parquet"
+        ],
+        "elapsed_s": 37.8
+      }
+    },
+    "s7_attrs": {
+      "stage": "s7_attrs",
+      "schema_version": "1",
+      "started_at": "2026-09-04T09:46:24.361+00:00",
+      "finished_at": "2026-09-04T09:52:52.957+00:00",
+      "status": "ok",
+      "config_path": "configs\\s7_attrs.yaml",
+      "config_sha256": "c81b7faaa32898cb2f8b3d7ebaf685039e6ac9cb3573470399e1ef28cae85531",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": 224,
+        "device": "cuda:0",
+        "precision": "fp16",
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "39be221493d6088651b7072765964800ad25c382",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "evidence_claims_declared": [
+          "claim.attrs.top_color"
+        ],
+        "color_stats": {
+          "ok": 1620,
+          "too_small_px": 772,
+          "low_agreement": 967,
+          "not_attempted": 0
+        },
+        "white_balance": {
+          "applied": true,
+          "reference": "road_surface",
+          "reference_is_measured": false,
+          "gains_bgr": [
+            0.8955,
+            1.016,
+            1.1123
+          ],
+          "excluded_by": {
+            "in_roi_minus_people": 19001952,
+            "clipped": 9100,
+            "too_saturated": 1678
+          },
+          "gain_spread_p10_p50_p90": [
+            [
+              0.888,
+              1.01,
+              1.106
+            ],
+            [
+              0.893,
+              1.013,
+              1.121
+            ],
+            [
+              0.904,
+              1.019,
+              1.129
+            ]
+          ],
+          "sat_road_before": 62.0,
+          "sat_road_after": 23.0,
+          "hue_hist_road_before": [
+            4779,
+            8176,
+            7793,
+            7563,
+            2273,
+            507,
+            1235,
+            54,
+            84,
+            0,
+            400,
+            36,
+            12,
+            60,
+            15,
+            30,
+            227,
+            119,
+            1601,
+            609,
+            20974,
+            291531,
+            37324,
+            6446,
+            6544,
+            1498,
+            2162,
+            243,
+            800,
+            64,
+            16,
+            162,
+            38,
+            2991,
+            52,
+            910
+          ],
+          "hue_hist_road_after": [
+            3997,
+            7027,
+            36336,
+            29780,
+            8596,
+            2370,
+            6408,
+            1272,
+            862,
+            2621,
+            1141,
+            19,
+            2796,
+            994,
+            1438,
+            11853,
+            2984,
+            6348,
+            18928,
+            34704,
+            73725,
+            73522,
+            10704,
+            1752,
+            3545,
+            688,
+            363,
+            979,
+            225,
+            12,
+            681,
+            92,
+            258,
+            604,
+            581,
+            296
+          ],
+          "note_ru": "Падение насыщенности фона к нулю доказывает, что коррекция ПРИМЕНИЛАСЬ, а не что она ВЕРНА: коэффициенты считались из этого же фона. Единственная некольцевая проверка — ручная разметка."
+        },
+        "coverage": 0.4823,
+        "by_color": {
+          "blue": 606,
+          "grey": 458,
+          "orange": 61,
+          "white": 31,
+          "black": 408,
+          "pink": 3,
+          "red": 39,
+          "purple": 4,
+          "green": 8,
+          "yellow": 2
+        },
+        "evidence_index": "evidence\\index.parquet",
+        "evidence_sampling_stats": {
+          "claim.attrs.color.black": {
+            "n_offered": 408,
+            "n_retained": 408,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 136,
+                "conf_min": 0.36895396789717505,
+                "conf_max": 0.5449810606060606
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 136,
+                "conf_min": 0.5561010319074835,
+                "conf_max": 0.6944444444444444
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 136,
+                "conf_min": 0.6988970588235294,
+                "conf_max": 0.9031954887218046
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.blue": {
+            "n_offered": 606,
+            "n_retained": 606,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 202,
+                "conf_min": 0.39144812177070243,
+                "conf_max": 0.4262348078776938
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 202,
+                "conf_min": 0.4927467817270449,
+                "conf_max": 0.6427698642556416
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 202,
+                "conf_min": 0.6822664568937075,
+                "conf_max": 0.8812146400062001
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.green": {
+            "n_offered": 8,
+            "n_retained": 8,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 8,
+            "shortfall": 4,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 3,
+                "candidates": 3,
+                "conf_min": 0.37696131029464364,
+                "conf_max": 0.6116790153750417
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 2,
+                "candidates": 2,
+                "conf_min": 0.7484335152174019,
+                "conf_max": 0.8398799088359046
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 3,
+                "candidates": 3,
+                "conf_min": 0.8633926854767938,
+                "conf_max": 0.9790849673202614
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.grey": {
+            "n_offered": 458,
+            "n_retained": 458,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 153,
+                "conf_min": 0.3541819492774068,
+                "conf_max": 0.46506315140830323
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 152,
+                "conf_min": 0.5261939439709425,
+                "conf_max": 0.6037070233498805
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 153,
+                "conf_min": 0.6490999488872633,
+                "conf_max": 0.9322834692277321
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.orange": {
+            "n_offered": 61,
+            "n_retained": 61,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 20,
+                "conf_min": 0.4561216727460967,
+                "conf_max": 0.5496029506850325
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 21,
+                "conf_min": 0.5704357123763699,
+                "conf_max": 0.7265577838779667
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 20,
+                "conf_min": 0.801932570855515,
+                "conf_max": 0.9418084590943857
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.pink": {
+            "n_offered": 3,
+            "n_retained": 3,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 3,
+            "shortfall": 9,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.4389717486854596,
+                "conf_max": 0.4389717486854596
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.44561140285071266,
+                "conf_max": 0.44561140285071266
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.6575682382133995,
+                "conf_max": 0.6575682382133995
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.purple": {
+            "n_offered": 4,
+            "n_retained": 4,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 4,
+            "shortfall": 8,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.3592825875934864,
+                "conf_max": 0.3592825875934864
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 2,
+                "candidates": 2,
+                "conf_min": 0.38122940177768905,
+                "conf_max": 0.41688311688311686
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.4871595708085399,
+                "conf_max": 0.4871595708085399
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.red": {
+            "n_offered": 39,
+            "n_retained": 39,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 13,
+                "conf_min": 0.46723686816566073,
+                "conf_max": 0.5586716988817945
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 13,
+                "conf_min": 0.5790188787185355,
+                "conf_max": 0.7520548451625185
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 13,
+                "conf_min": 0.8087092731829574,
+                "conf_max": 0.9397721285563752
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.white": {
+            "n_offered": 31,
+            "n_retained": 31,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 10,
+                "conf_min": 0.35758777449260926,
+                "conf_max": 0.48100755064070283
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 11,
+                "conf_min": 0.5227272727272727,
+                "conf_max": 0.536
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 10,
+                "conf_min": 0.5552083333333333,
+                "conf_max": 0.5833333333333334
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.color.yellow": {
+            "n_offered": 2,
+            "n_retained": 2,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 2,
+            "shortfall": 10,
+            "n_strata": 2,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 6,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.3542213694594647,
+                "conf_max": 0.3542213694594647
+              },
+              {
+                "stratum": 1,
+                "quota": 6,
+                "selected": 1,
+                "candidates": 1,
+                "conf_min": 0.5877544209459988,
+                "conf_max": 0.5877544209459988
+              }
+            ],
+            "seed": 20260903
+          },
+          "claim.attrs.top_color": {
+            "n_offered": 1620,
+            "n_retained": 1620,
+            "n_dropped_by_reservoir": 0,
+            "n_requested": 12,
+            "n_selected": 12,
+            "shortfall": 0,
+            "n_strata": 3,
+            "per_stratum": [
+              {
+                "stratum": 0,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 540,
+                "conf_min": 0.380030959752322,
+                "conf_max": 0.46510522030122137
+              },
+              {
+                "stratum": 1,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 540,
+                "conf_min": 0.5450834055906519,
+                "conf_max": 0.6492913832199546
+              },
+              {
+                "stratum": 2,
+                "quota": 4,
+                "selected": 4,
+                "candidates": 540,
+                "conf_min": 0.6605691056910569,
+                "conf_max": 0.7716097308488612
+              }
+            ],
+            "seed": 20260903
+          }
+        },
+        "output_artifact": "attr/tracks_attr.parquet",
+        "elapsed_s": 388.6
+      }
+    },
+    "s8_aggregate": {
+      "stage": "s8_aggregate",
+      "schema_version": "1",
+      "started_at": "2026-09-05T10:59:23.452+00:00",
+      "finished_at": "2026-09-05T10:59:26.340+00:00",
+      "status": "ok",
+      "config_path": "configs\\s8_aggregate.yaml",
+      "config_sha256": "2bcb96c0e1afce2f4bbf57ff6d133ed9708e8072ed66da0c57f3af64054dc69a",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "ee7526cebcd3209b63a2ce2b7de64357a5b5a6b0",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "n_metrics": 22,
+        "calib_status": "scale_from_height",
+        "output_artifact": "out/metrics.json",
+        "elapsed_s": 2.9
+      }
+    },
+    "s9_report": {
+      "stage": "s9_report",
+      "schema_version": "1",
+      "started_at": "2026-09-05T19:29:44.864+00:00",
+      "finished_at": "2026-09-05T19:29:48.048+00:00",
+      "status": "ok",
+      "config_path": "configs\\s9_report.yaml",
+      "config_sha256": "6f89c1e8376369bc46f09757a7ebf820f0519266e85f70d23609cdf6d80898d7",
+      "model": {
+        "weights": null,
+        "weights_sha256": null,
+        "weights_present": false,
+        "imgsz": null,
+        "device": null,
+        "precision": null,
+        "tracker": null,
+        "tracker_version": null
+      },
+      "git_sha": "c85f9a7a3295226286feebf95ddb248597d44f16",
+      "git_dirty": true,
+      "libraries": {
+        "python": "3.10.11",
+        "platform": "Windows-10-10.0.19045-SP0",
+        "numpy": "1.26.4",
+        "cv2": "4.9.0",
+        "pandas": "2.1.4",
+        "pyarrow": "25.0.1",
+        "yaml": "6.0.2",
+        "torch": "2.11.0+cu128",
+        "ultralytics": "8.4.138",
+        "shapely": "2.1.2",
+        "scipy": "1.15.3"
+      },
+      "gpu": {
+        "cuda_available": true,
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vram_total_mb": 8187
+      },
+      "notes": {
+        "n_metrics_rendered": 22,
+        "scale_known": true,
+        "output_artifact": "out/report.html",
+        "elapsed_s": 3.2
+      }
+    }
+  },
+  "aborted_runs": [
+    {
+      "stage": "s3_detect",
+      "started_at": "2026-09-04T00:49:29.358+00:00",
+      "detected_at": "2026-09-04T00:58:22.444+00:00"
+    },
+    {
+      "stage": "s7_attrs",
+      "started_at": "2026-09-04T01:29:49.257+00:00",
+      "detected_at": "2026-09-04T01:30:28.198+00:00"
+    },
+    {
+      "stage": "s7_attrs",
+      "started_at": "2026-09-04T09:36:09.625+00:00",
+      "detected_at": "2026-09-04T09:46:24.355+00:00"
+    },
+    {
+      "stage": "s6_attn",
+      "started_at": "2026-09-04T09:34:22.577+00:00",
+      "detected_at": "2026-09-05T09:44:30.994+00:00"
+    },
+    {
+      "stage": "s8_aggregate",
+      "started_at": "2026-09-04T09:34:59.752+00:00",
+      "detected_at": "2026-09-05T09:45:13.838+00:00"
+    },
+    {
+      "stage": "s9_report",
+      "started_at": "2026-09-04T09:35:03.386+00:00",
+      "detected_at": "2026-09-05T09:45:17.365+00:00"
+    }
+  ]
+}

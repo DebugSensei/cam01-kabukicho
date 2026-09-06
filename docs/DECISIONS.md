@@ -1240,6 +1240,32 @@ That is a real loss for a page whose value is traceability, and it should be
 named rather than hidden: the full archive is available from a local run, and the
 README says so next to the link.
 
+### 12.2.1. `run_manifest.json` ships, and why it did not before
+
+Rule 6 exists so that "we use YOLO" is not an acceptable answer: the weights
+name, their sha256, the input resolution, the device, the precision and the
+library versions are written to `run_manifest.json` on every run. The file was
+gitignored, which made the rule unverifiable by anyone who cloned the
+repository — and this document names the manifest as a source of its own
+numbers three paragraphs into section 0. It now ships, next to
+`zones/zones.json` and `calib/homography.json` and for the same reason. It
+holds no personal data: model and config hashes, timings, library versions and
+the four storefront names.
+
+Publishing it turned up something first. The manifest recorded `s2_zones` with
+`status: failed` and an error about a missing `zones/zones_FRESHCLONE.json`,
+against a config named `configs/_s2_freshclone_test.yaml`. That was not the
+run: it was a throwaway invocation used to check that S2 fails loudly on a
+clone with no traced zones, and it had overwritten the real entry. The manifest
+keeps one record per stage, so a test run silently replaces a real one — worth
+knowing, and the reason the file is worth reading before it is published rather
+than after.
+
+S2 was re-run with the real config to restore a truthful entry: 8.5 s, and
+`zones/zones.geojson` came out byte-identical (sha256 f97fecb8466025f7 before
+and after), so nothing downstream is affected. Every stage now reads `ok`
+except `s0_ingest`, which reads `not_implemented`, which is true.
+
 ### 12.3. How it is done
 
 `--public` on `make_dashboard.py` and `make_benchmark.py`. In that mode the
@@ -1364,8 +1390,30 @@ time and place still identify a person — exactly the argument for not
 publishing the full crop archive in 12.2, and covering the faces does not
 retire it.
 
-The old version of the video on YouTube is to be deleted: it contains the same
-frames without anonymisation.
+### 13.5. Two surfaces, two decisions
+
+The repository and the YouTube link are governed differently, on purpose, and
+the difference is the owner's decision rather than an unfinished task.
+
+**Everything in the repository is anonymised.** The seven figures in
+`docs/img/`, the images embedded in the published pages, the crops written by
+the stages — all of it goes through the single write path of section 14, and
+the gate measures zero sharp facial keypoints across the lot. This is the
+surface that is permanent: a public git repository keeps its blobs reachable
+by SHA after a delete, and GitHub Pages is indexed and cached.
+
+**The recording on YouTube is the earlier render and is not anonymised.** The
+owner chose to keep it for one demonstration and to remove it afterwards. That
+choice is defensible where the repository one is not, for a reason worth
+stating plainly: a YouTube video can actually be deleted, and a commit cannot.
+The underlying stream is public either way; what differs is who is
+redistributing it and for how long.
+
+The anonymised render exists — `out/overlay.mp4`, 89 MB, measured in 13.3 — and
+replaces the linked one after the demonstration. Until it does, the claim
+"the renderer anonymises by construction" is a claim about the code and about
+every file in this repository, not about that particular upload, and README
+says so at the link.
 
 ---
 
@@ -1480,19 +1528,37 @@ Both prohibitions were mutation-tested rather than assumed. Appending a
 line; calling `_install_models_for_tests` from `scripts/make_dashboard.py`
 fails the second the same way. A gate nobody has tried to break is a comment.
 
-**The cost of routing `looq.evidence` through the detector, stated.** Crop
-writing now needs the model weights, and on a clean clone there are none, so
-twelve evidence tests that write synthetic noise crops stopped being able to
-run at all. `tests/conftest.py` installs a stub that honestly finds nothing —
-their crops contain no people — and only when the weights are genuinely
-absent; with weights present the real models run. The stub is a seam, and a
-seam is a liability, so calling it from `looq/`, `scripts/` or `verify/` is
-itself a test failure. The alternative was to leave `evidence.py` on the fixed
-band and delete this machinery, at the price of leaving 86 of 668 crops on
-disk with a visible face while rule 9 says crops of faces are not written to
-disk. The published surface is clean either way, because the pages
-re-anonymise every crop through the detector as they embed it; what the
-detector pass at write time buys is the local files.
+**`tests/conftest.py` is a compromise, not a design.** It should be read as
+one, because it was not planned and exists only to repair a consequence.
+
+Routing `looq.evidence` through the detector made crop writing depend on 40 MB
+of model weights. In a real run that is correct and even desirable — S3, S5 and
+S7 load those weights anyway, and failing without them is rule 8. On a clean
+clone there are no weights, and the effect was measured on a clone of the
+pushed commit: **12 failed, 97 passed, 4 skipped**. Twelve evidence tests write
+synthetic noise crops to check the blur band and the index bookkeeping, and
+they could no longer write anything at all.
+
+`tests/conftest.py` installs a model that honestly finds nothing, and only when
+the weights are genuinely absent; with weights present the real models run.
+"Found nothing" is the true answer on a noise crop, not a skipped step. The
+clone is back to 109 passed, 4 skipped.
+
+A seam is a liability, so it is closed from the other side: calling
+`_install_models_for_tests` or `_anonymise_with` from `looq/`, `scripts/` or
+`verify/` fails `test_anonymise_has_no_off_switch`, and that prohibition was
+mutation-tested. But the honest summary is that fifty lines of test scaffolding
+exist because a production module acquired a heavy dependency, and a design
+that needed no scaffolding would have been better.
+
+The alternative was considered and rejected by the owner: leave `evidence.py`
+on the fixed band, delete this machinery, and accept that 86 of 668 crops sit
+on disk with a visible face while rule 9 says crops of faces are not written to
+disk. Their reasoning, recorded as given: a rule the project breaks itself is
+worse than fifty lines of scaffolding, and 70 s per run is an acceptable price.
+The published surface was clean either way, because the pages re-anonymise
+every crop through the detector as they embed it; what the detector pass at
+write time buys is the files on disk.
 
 ### 14.6. What was not done, and why
 
