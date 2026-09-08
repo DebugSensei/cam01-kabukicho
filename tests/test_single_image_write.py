@@ -177,7 +177,7 @@ SHARP_THR = 13.4
 _POSE = ROOT / "models" / "yolo11m-pose.pt"
 #: Страницы, которые реально уходят на GitHub Pages. report.html и replay
 #: сюда не входят: они не публикуются (docs/DECISIONS.md, раздел 12).
-PUBLISHED = ("out/dashboard.html", "out/benchmark.html")
+PUBLISHED = ("out/dashboard.html", "out/benchmark.html", "out/showcase.html")
 
 
 def _sharp_at(gray, x, y, win: int = WIN) -> float:
