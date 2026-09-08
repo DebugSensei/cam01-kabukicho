@@ -40,6 +40,7 @@ from typing import Any
 import numpy as np
 
 from looq import STATUS_OK, STATUS_SKELETON
+from looq.geometry import smooth_yaw_series_deg
 from looq.calib import CalibError, apply_h, yaw_from_pair_via_horizon
 from looq.evidence import EvidenceError
 from looq.io import ConfigError, RunManifest, load_config, read_json, require
@@ -287,8 +288,43 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
     print(f"[{STAGE}] уточнённая опорная точка по лодыжкам: {ankle_cov:.1%} строк "
           f"(остальные останутся на bbox_bottom из S4 — косвенные, правило 7)")
     print(f"[{STAGE}] отсеяно: мелкие {stats['too_small']}, мало keypoints {stats['few_kpts']}")
+    n_smoothed = _smooth_rows(rows, int(orient_cfg.get("smooth_window_frames", 0)))
+    if n_smoothed:
+        manifest.note("smooth_window_frames", int(orient_cfg["smooth_window_frames"]))
+        manifest.note("rows_smoothed", n_smoothed)
+        print(f"[{STAGE}] углы сглажены круговой медианой, окно "
+              f"{orient_cfg['smooth_window_frames']} кадров: изменено {n_smoothed} строк. "
+              f"Причина и цена — в configs/s5_orient.yaml")
+
     return {"rows": rows, "body_coverage": body_cov, "head_coverage": head_cov,
             "foot_refined_coverage": ankle_cov}
+
+
+def _smooth_rows(rows: list[dict[str, Any]], window: int) -> int:
+    """Сглаживает углы по каждому треку НА МЕСТЕ. Возвращает число изменённых строк.
+
+    Делается ПОСЛЕ сбора всех строк, а не по ходу: медиана окна требует и
+    будущих кадров, а поток идёт по времени. Пруфы уже отобраны по сырым
+    значениям, и это правильно — на кропе видно то, что выдала модель.
+    """
+    if window < 3:
+        return 0
+    by_track: dict[int, list[int]] = {}
+    for i, r in enumerate(rows):
+        by_track.setdefault(int(r["track_id"]), []).append(i)
+    changed = 0
+    for idx in by_track.values():
+        idx.sort(key=lambda i: rows[i]["frame_idx"])
+        for col in ("body_yaw_deg", "head_yaw_deg"):
+            raw = np.array([np.nan if rows[i][col] is None else float(rows[i][col])
+                            for i in idx], dtype=np.float64)
+            sm = smooth_yaw_series_deg(raw, window)
+            for k, i in enumerate(idx):
+                if np.isfinite(sm[k]) and (not np.isfinite(raw[k])
+                                           or abs(sm[k] - raw[k]) > 1e-9):
+                    rows[i][col] = float(sm[k])
+                    changed += 1
+    return changed
 
 
 def _offer_evidence(sampler, frame, box, track_id, frame_idx, ts,

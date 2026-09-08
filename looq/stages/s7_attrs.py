@@ -56,12 +56,14 @@ OUTPUT_COLS: list[Col] = [
     Col("track_id",        "int32",   False, "-",     "-", "идентификатор трека"),
     Col("top_color_name",  "string",  True,  "-",     "-", "цвет верхней одежды из палитры конфига; null = не определён"),
     Col("top_color_conf",  "float32", True,  "[0,1]", "-", "доля кадров за класс x доля согласных пикселей. НЕ вероятность правильности"),
-    Col("top_color_status", "string", False, "-",     "-", "ok | too_small_px | low_agreement | not_attempted"),
+    Col("top_color_status", "string", False, "-",     "-", "ok | too_small_px | low_agreement | background_match | not_attempted"),
     Col("n_crops_used",    "int16",   False, "шт",    "-", "кропов участвовало в голосовании"),
     Col("n_crops_available", "int16", False, "шт",    "-", "кропов было доступно"),
     Col("hsv_h",           "float32", True,  "0-179", "-", "медианный тон области торса"),
     Col("hsv_s",           "float32", True,  "0-255", "-", "медианная насыщенность"),
     Col("hsv_v",           "float32", True,  "0-255", "-", "медианная яркость"),
+    Col("bg_hue_dist_deg", "float32", True,  "градус", "-", "расхождение тона торса и фона по краям кропа. Малое значение при равной насыщенности = цвет от освещения, а не от ткани"),
+    Col("bg_sat_ratio",    "float32", True,  "-",     "-", "насыщенность торса / насыщенность фона. Около 1 при малом bg_hue_dist_deg = подсветка"),
 ]
 
 #: Границы классов в HSV. Комментарии — почему граница там, где она есть.
@@ -98,8 +100,26 @@ def classify_hsv(h: float, s: float, v: float, cfg: dict) -> tuple[str, str]:
     return "other", "hue_unmatched"
 
 
-def torso_median_hsv(crop_bgr: np.ndarray, cfg: dict) -> tuple[np.ndarray, float] | None:
-    """Медианный HSV области торса и доля пикселей, согласных с классом."""
+def _hue_distance(a: float, b: float) -> float:
+    """Расстояние между тонами по кругу OpenCV [0, 180). Наивная разность даёт
+    179 там, где на самом деле 1."""
+    d = abs(float(a) - float(b)) % 180.0
+    return min(d, 180.0 - d)
+
+
+def torso_median_hsv(crop_bgr: np.ndarray, cfg: dict):
+    """Медианный HSV торса, согласие пикселей и КОНТРАСТ ТОРСА К ФОНУ.
+
+    Контраст нужен, чтобы отличить цвет одежды от цвета освещения. Подсветка
+    красит и человека, и стену за ним одинаково, поэтому у «цвета от лампы»
+    торс и фон совпадают по тону и по насыщенности. Замер 2026-09-08 по
+    пруф-кропам: у оранжевого расхождение тона 2.1 градуса при равной
+    насыщенности (96 против 99), у синего 12.5 градуса при насыщенности 81
+    против 38, у чёрного 31.8 при 100 против 42.
+
+    Фон берётся по левой и правой кромкам кропа НА ТОЙ ЖЕ ВЫСОТЕ, что и торс:
+    сравнивать торс с небом над головой было бы сравнением разных вещей.
+    """
     h, w = crop_bgr.shape[:2]
     top = float(cfg.get("torso_top_frac", 0.22))
     bot = float(cfg.get("torso_bottom_frac", 0.55))
@@ -113,7 +133,21 @@ def torso_median_hsv(crop_bgr: np.ndarray, cfg: dict) -> tuple[np.ndarray, float
     med = np.median(hsv, axis=0)
     name, _ = classify_hsv(med[0], med[1], med[2], cfg)
     agree = np.mean([classify_hsv(p[0], p[1], p[2], cfg)[0] == name for p in hsv])
-    return med, float(agree)
+
+    edge = max(1, int(w * float(cfg.get("bg_edge_frac", 0.12))))
+    sides = [crop_bgr[y0:y1, :edge], crop_bgr[y0:y1, w - edge:]]
+    sides = [s for s in sides if s.size]
+    if sides:
+        bg = np.median(np.vstack([
+            cv2.cvtColor(s, cv2.COLOR_BGR2HSV).reshape(-1, 3).astype(np.float64)
+            for s in sides]), axis=0)
+        d_hue = _hue_distance(med[0], bg[0])
+        # Отношение насыщенностей, а не разность: разность в 20 единиц значит
+        # разное при насыщенности 30 и при 150.
+        r_sat = float(med[1] + 1.0) / float(bg[1] + 1.0)
+    else:
+        d_hue, r_sat = float("nan"), float("nan")
+    return med, float(agree), float(d_hue), float(r_sat)
 
 
 def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
@@ -229,8 +263,7 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
             got = torso_median_hsv(crop_wb, attrs_cfg)
             if got is None:
                 continue
-            med, agree = got
-            samples.setdefault(int(tid), []).append((med, agree))
+            samples.setdefault(int(tid), []).append(got)
             clip_by_track.setdefault(int(tid), []).append(clip_frac)
             crops_for_evidence.setdefault(int(tid), (crop_wb, int(fi), float(b.conf)))
 
@@ -247,7 +280,11 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
     pending.clear()
 
     rows: list[dict[str, Any]] = []
-    stats = {"ok": 0, "too_small_px": 0, "low_agreement": 0, "not_attempted": 0}
+    stats = {"ok": 0, "too_small_px": 0, "low_agreement": 0,
+             "background_match": 0, "not_attempted": 0}
+    # Пороги отделения «цвет лампы» от «цвет ткани». Значения в конфиге.
+    bg_hue_min = float(attrs_cfg.get("bg_min_hue_dist_deg", 6.0))
+    bg_sat_tol = float(attrs_cfg.get("bg_sat_ratio_tol", 0.25))
     by_color: dict[str, list[int]] = {}
     for tid in sorted(picks):
         avail = len(picks[tid])
@@ -257,7 +294,8 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
             rows.append({"track_id": tid, "top_color_name": None, "top_color_conf": None,
                          "top_color_status": "too_small_px", "n_crops_used": 0,
                          "n_crops_available": avail, "hsv_h": None, "hsv_s": None,
-                         "hsv_v": None})
+                         "hsv_v": None, "bg_hue_dist_deg": None,
+                         "bg_sat_ratio": None})
             continue
         # ГОЛОСОВАНИЕ ПО КРОПАМ, а не усреднение HSV между кадрами. Медиана
         # тона по кадрам смешивает разные условия освещения в одно число,
@@ -265,18 +303,21 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
         # и он же в тени дают "средний" тон, не равный ни одному наблюдению.
         # Голосование выбирает класс, который реально повторился чаще всего.
         votes: dict[str, int] = {}
-        for med_i, _ in got:
+        for med_i, *_rest in got:
             nm, _ = classify_hsv(med_i[0], med_i[1], med_i[2], attrs_cfg)
             if nm not in palette:
                 nm = "other"
             votes[nm] = votes.get(nm, 0) + 1
         name = max(sorted(votes), key=lambda k: votes[k])
-        winners = [i for i, (mm, _) in enumerate(got)
+        winners = [i for i, (mm, *_r) in enumerate(got)
                    if classify_hsv(mm[0], mm[1], mm[2], attrs_cfg)[0] == name]
         # HSV в артефакте — медиана ТОЛЬКО по кадрам, проголосовавшим за
         # победивший класс: иначе записанный тон противоречил бы записанному
         # классу.
         med = np.median(np.stack([got[i][0] for i in winners]), axis=0)
+        # Контраст к фону по тем же кадрам, что дали победивший класс.
+        d_hue = float(np.nanmedian([got[i][2] for i in winners]))
+        r_sat = float(np.nanmedian([got[i][3] for i in winners]))
         # Две доли перемножаются: сколько кадров сошлись на классе и насколько
         # чисто выглядел торс на этих кадрах. Обе — доли согласия, не
         # вероятности правильности.
@@ -284,7 +325,13 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
         pixel_agree = float(np.mean([got[i][1] for i in winners]))
         agree = float(vote_share * pixel_agree)
         status = "ok" if agree >= min_agree else "low_agreement"
-        stats[status] += 1
+        # Торс неотличим от фона И по тону, И по насыщенности — это цвет лампы,
+        # а не ткани. Условие «И», а не «ИЛИ»: тёмная одежда на тёмной стене
+        # честно совпадает по насыщенности, но расходится по тону.
+        if status == "ok" and np.isfinite(d_hue) and np.isfinite(r_sat) \
+                and d_hue < bg_hue_min and abs(r_sat - 1.0) < bg_sat_tol:
+            status = "background_match"
+        stats[status] = stats.get(status, 0) + 1
         if status == "ok":
             by_color.setdefault(name, []).append(tid)
         rows.append({
@@ -294,6 +341,8 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
             "top_color_status": status,
             "n_crops_used": len(got), "n_crops_available": avail,
             "hsv_h": float(med[0]), "hsv_s": float(med[1]), "hsv_v": float(med[2]),
+            "bg_hue_dist_deg": None if not np.isfinite(d_hue) else round(d_hue, 2),
+            "bg_sat_ratio": None if not np.isfinite(r_sat) else round(r_sat, 3),
         })
 
     coverage = stats["ok"] / max(1, len(rows))
@@ -337,7 +386,8 @@ def run(cfg: dict[str, Any], manifest: RunManifest, sampler) -> dict[str, Any]:
     manifest.note("by_color", {k: len(v) for k, v in by_color.items()})
     print(f"[{STAGE}] треков {len(rows)}, определён цвет у {stats['ok']} "
           f"({coverage:.1%}), низкое согласие {stats['low_agreement']}, "
-          f"мелкие {stats['too_small_px']}")
+          f"мелкие {stats['too_small_px']}, "
+          f"неотличимы от фона {stats['background_match']}")
     print(f"[{STAGE}] по цветам: {dict(sorted(((k, len(v)) for k, v in by_color.items()), key=lambda x: -x[1]))}")
     print(f"[{STAGE}] ТОЧНОСТЬ НЕ ИЗМЕРЕНА: разметки нет. top_color_conf — доля "
           f"согласных пикселей, а не вероятность правильности")

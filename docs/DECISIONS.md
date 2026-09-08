@@ -763,14 +763,14 @@ and a hand-typed copy of a computed table will drift again on the next run.
 
 | storefront | visitors | stopped | turned (95 % Wilson) | median attention | median time in zone |
 |---|---|---|---|---|---|
-| M1 角煮/げんかつ | 2 198 | 0.05 % (n=1) | **2.46 %** [1.89, 3.19] (n=54) | 1.3 s | 18.4 s |
-| M2 入口/らーめん | 2 551 | 0 % (n=0, upper 0.15 %) | **7.53 %** [6.57, 8.62] (n=192) | 2.4 s | 17.0 s |
-| M3 芝浦ホルモン | 2 588 | 0.08 % (n=2) | **13.33 %** [12.08, 14.69] (n=345) | 1.4 s | 16.8 s |
-| M4 お好み焼き | 2 706 | 0.15 % (n=4) | **3.40 %** [2.78, 4.15] (n=92) | 0.6 s | 16.3 s |
+| M1 角煮/げんかつ | 2 198 | 0.05 % (n=1) | **2.41 %** [1.85, 3.14] (n=53) | 1.7 s | 18.4 s |
+| M2 入口/らーめん | 2 551 | 0 % (n=0, upper 0.15 %) | **6.82 %** [5.91, 7.87] (n=174) | 2.3 s | 17.0 s |
+| M3 芝浦ホルモン | 2 588 | 0.08 % (n=2) | **13.10 %** [11.85, 14.45] (n=339) | 1.5 s | 16.8 s |
+| M4 お好み焼き | 2 706 | 0.15 % (n=4) | **3.29 %** [2.68, 4.03] (n=89) | 0.6 s | 16.3 s |
 
 3 359 tracks in total, 10 043 events; the sum reconciliation in S8 balances on all 9 checks.
 
-The leader is **M3** at **13.33 %** [12.08, 14.69] over n=345 turned tracks, and its interval does not overlap the next storefront's.
+The leader is **M3** at **13.10 %** [11.85, 14.45] over n=339 turned tracks, and its interval does not overlap the next storefront's.
 
 **The caveats that travel with the table.** Orientation coverage is **45.6 %**
 for the body and **22.4 %** for the head — the turned share is computed over a

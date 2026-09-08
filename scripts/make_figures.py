@@ -29,6 +29,7 @@ from looq.io import load_config, read_json, require  # noqa: E402
 
 OUT_DIR = Path("out/img")
 PLAN_SIZE = (900, 1500)     # ширина, высота
+STOP_MAP_SIZE = (1400, 520)  # карта остановок горизонтальная: улица 30x10 м
 
 
 def _facades(zones):
@@ -115,6 +116,92 @@ def plan_all(tracks, zones, unit: str, path: Path) -> None:
     print(f"  {path} ({n} траекторий)")
 
 
+def stop_map(tracks, zones, hotspots: dict, unit: str, path: Path) -> None:
+    """Где на улице стоят: человеко-секунды по клеткам плана.
+
+    Читается ИЗ out/metrics.json, а не пересчитывается здесь. Пересчитать
+    значило бы завести второе место, где живёт то же число, и они разъедутся —
+    ровно так страница реплея печатала 279 попаданий против 3 на дашборде.
+
+    Цвет — доля от максимума, подпись — секунды и число РАЗНЫХ треков. Второе
+    число обязательно: 1448 секунд от одного застрявшего трека и от 85 разных
+    людей выглядят одинаково, а значат противоположное.
+    """
+    # ГОРИЗОНТАЛЬНАЯ, в отличие от plan_all. Улица тянется на 30 м вдоль и на
+    # 10 поперёк; вертикальный кадр 900x1500 превращает её в простыню, которую
+    # на витрине приходится листать. Здесь rotate=False: ось улицы идёт по x.
+    w, h = STOP_MAP_SIZE
+    facades, roi = _facades(zones)
+    cells = hotspots["cells"]
+    if not cells:
+        print("  карта остановок: клеток нет, пропуск")
+        return
+    b = float(hotspots["bin_m"])
+
+    pts = [np.array([[c["x_m"], c["y_m"]] for c in cells], dtype=np.float64),
+           np.array([[c["x_m"] + b, c["y_m"] + b] for c in cells], dtype=np.float64)]
+    if roi is not None:
+        pts.append(roi)
+    pts += [f["seg_m"] for f in facades.values()]
+    plan = PlanView(w, h, np.concatenate(pts), rotate=False)
+    img = np.full((h, w, 3), 250, np.uint8)
+
+    lo, hi = np.concatenate(pts).min(axis=0), np.concatenate(pts).max(axis=0)
+    for xm in range(int(np.floor(lo[0])) - 1, int(np.ceil(hi[0])) + 2):
+        if xm % 5:
+            continue
+        a = plan.to_px([xm, lo[1] - 2])[0]
+        c2 = plan.to_px([xm, hi[1] + 2])[0]
+        cv2.line(img, tuple(a), tuple(c2), (218, 218, 218), 1, cv2.LINE_AA)
+        cv2.putText(img, f"{xm}", tuple(plan.to_px([xm, lo[1] - 1])[0]),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (150, 150, 150), 1, cv2.LINE_AA)
+
+    top = max(c["stop_seconds"] for c in cells)
+    for c in sorted(cells, key=lambda d: d["stop_seconds"]):
+        q = c["stop_seconds"] / top
+        corners = np.array([[c["x_m"], c["y_m"]], [c["x_m"] + b, c["y_m"]],
+                            [c["x_m"] + b, c["y_m"] + b], [c["x_m"], c["y_m"] + b]],
+                           dtype=np.float64)
+        px = plan.to_px(corners)
+        # Тёплая шкала: чем дольше стоят, тем насыщеннее. Слабые клетки почти
+        # прозрачны, иначе фон из редких единичных стоянок съедает картинку.
+        col = (int(240 - 200 * q), int(240 - 200 * q), 255)
+        ov = img.copy()
+        cv2.fillPoly(ov, [px], col)
+        cv2.addWeighted(ov, 0.25 + 0.7 * q, img, 0.75 - 0.7 * q, 0, dst=img)
+        if q > 0.12:
+            m = px.mean(axis=0).astype(int)
+            cv2.putText(img, f"{c['stop_seconds']:.0f}s", (m[0] - 22, m[1]),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (30, 30, 30), 1, cv2.LINE_AA)
+            cv2.putText(img, f"{c['n_tracks']} tr", (m[0] - 18, m[1] + 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.36, (90, 90, 90), 1, cv2.LINE_AA)
+
+    if roi is not None:
+        cv2.polylines(img, [plan.to_px(roi)], True, (150, 150, 150), 2, cv2.LINE_AA)
+    for zid, fac in facades.items():
+        seg = plan.to_px(fac["seg_m"])
+        cv2.line(img, tuple(seg[0]), tuple(seg[1]), fac["color"], 8, cv2.LINE_AA)
+        mid = seg.mean(axis=0).astype(int)
+        cv2.putText(img, zid.replace("facade_", ""), (mid[0] + 12, mid[1]),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (40, 40, 40), 2, cv2.LINE_AA)
+
+    # Подпись внизу слева: наверху она наезжала на метку витрины M1, а пустое
+    # место на этой картинке — как раз нижний левый угол.
+    share = hotspots["stop_share"] * 100.0
+    y0 = h - 78
+    cv2.rectangle(img, (0, y0 - 24), (640, h), (250, 250, 250), -1)
+    cv2.putText(img, f"standing time per {b:.0f} {unit} cell, brighter = longer",
+                (16, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 60, 60), 2, cv2.LINE_AA)
+    cv2.putText(img, f"{hotspots['stop_seconds_total']:.0f} person-s below "
+                     f"{hotspots['speed_thr_mps']:.2f} m/s = {share:.1f}% of observed time",
+                (16, y0 + 26), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 60, 60), 1, cv2.LINE_AA)
+    cv2.putText(img, f"{hotspots['n_stopper_tracks']} tracks stood >= "
+                     f"{hotspots['min_duration_s']:.1f}s at least once",
+                (16, y0 + 48), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (60, 60, 60), 1, cv2.LINE_AA)
+    save_image(path, img)
+    print(f"  {path} ({len(cells)} клеток, максимум {top:.0f} чел-с)")
+
+
 def zones_ref(video: Path, zones, frame_idx: int, path: Path) -> None:
     facades, _ = _facades(zones)
     cap = cv2.VideoCapture(str(video))
@@ -153,8 +240,16 @@ def main(argv=None) -> int:
     tracks = pd.read_parquet("track/tracks.parquet")
     zf = pd.read_parquet("attn/track_zone_frames.parquet")
 
+    metrics = read_json("out/metrics.json")
+
     print("рисую:")
     plan_all(tracks, zones, unit, args.out_dir / "plan_all.png")
+    if "stop_hotspots" in metrics:
+        stop_map(tracks, zones, metrics["stop_hotspots"], unit,
+                 args.out_dir / "stop_map.png")
+    else:
+        print("  карта остановок пропущена: в out/metrics.json нет stop_hotspots "
+              "(нужен свежий прогон S8)")
 
     # Опорный кадр — тот, где в кадре больше всего людей: на пустом кадре
     # зоны не с чем соотнести.

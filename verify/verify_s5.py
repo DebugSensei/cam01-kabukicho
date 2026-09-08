@@ -75,6 +75,55 @@ def measure_mae(path: Path) -> dict:
     }
 
 
+def measure_mae_live(labels_path, artifact_path):
+    """MAE той же разметки против ТЕКУЩЕГО артефакта, а не замороженного.
+
+    ЗАЧЕМ ДВА ЧИСЛА. measure_mae() берёт predicted_yaw_deg, записанный в файл
+    разметки в момент разметки: так число переживает перезапись артефакта и
+    остаётся воспроизводимым. Но именно поэтому оно не видит изменений
+    конвейера. Сглаживание углов (S5, smooth_window_frames) улучшило точность,
+    а гейт продолжал печатать старое число — то есть мерил не то, что система
+    выдаёт сегодня.
+
+    Здесь та же разметка сопоставляется с артефактом по (track_id, frame_idx).
+    Расхождение двух чисел — это и есть величина изменения конвейера с момента
+    разметки, и её надо видеть, а не выводить из чужих слов.
+    """
+    import json
+
+    import numpy as np
+    import pandas as pd
+
+    rows = [json.loads(x) for x in
+            Path(labels_path).read_text(encoding="utf-8").splitlines() if x][1:]
+    used = [r for r in rows if r.get("label") is not None]
+    if not used or not Path(artifact_path).is_file():
+        return None
+    df = pd.read_parquet(artifact_path)
+    key = df.set_index(["track_id", "frame_idx"])["body_yaw_deg"]
+    err, missing = [], 0
+    for r in used:
+        try:
+            pred = float(key.loc[(int(r["track_id"]), int(r["frame_idx"]))])
+        except (KeyError, TypeError, ValueError):
+            missing += 1
+            continue
+        if not np.isfinite(pred):
+            missing += 1
+            continue
+        err.append(angular_error_deg(pred, r["label"]))
+    if not err:
+        return None
+    err = np.array(err)
+    rng = np.random.default_rng(20260904)
+    bs = np.array([rng.choice(err, len(err), replace=True).mean() for _ in range(10000)])
+    lo, hi = np.percentile(bs, [2.5, 97.5])
+    return {"n": len(err), "missing": missing, "mae": float(err.mean()),
+            "median": float(np.median(err)), "ci95": [float(lo), float(hi)],
+            "p90": float(np.percentile(err, 90)),
+            "frac_over_90": float((err > 90).mean())}
+
+
 def check_invariants(df) -> tuple[bool, list[str]]:
     """Инварианты контракта: диапазоны углов и связь null с непокрытием."""
     problems: list[str] = []
@@ -156,6 +205,19 @@ def main(argv=None) -> int:
                   f">135 град {m['frac_over_135']:.1%} "
                   f"(ноль означает, что знак и система координат верны)")
             print(f"[S5]    разметка снята на {m['header'].get('video')}")
+            live = measure_mae_live(best, ARTIFACT)
+            if live is None:
+                print("[S5]    по текущему артефакту: НЕ СОПОСТАВЛЕНО "
+                      "(нет артефакта или ни одна размеченная строка не нашлась)")
+            else:
+                d = live["mae"] - m["mae"]
+                print(f"[S5]    по ТЕКУЩЕМУ артефакту: MAE {live['mae']:.1f} град "
+                      f"(95% [{live['ci95'][0]:.1f}, {live['ci95'][1]:.1f}]), "
+                      f"n={live['n']}, не сопоставлено {live['missing']}, "
+                      f"отличие от замороженного {d:+.1f} град")
+                print(f"[S5]    два числа расходятся ровно настолько, насколько "
+                      f"конвейер изменился с момента разметки. Решение гейта "
+                      f"принимается по ЗАМОРОЖЕННОМУ: оно воспроизводимо.")
             if m["n"] < N_REQUIRED:
                 # Правило 7: недобор объёма — это не «прошло», это отдельное число.
                 print(f"[S5]    НЕДОБОР ОБЪЁМА: размечено {m['n']} из {N_REQUIRED} "
